@@ -16,6 +16,7 @@ using System.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.UI;
 using System.Linq;
+using Jyx2;
 
 public interface IUIAnimator
 {
@@ -74,10 +75,10 @@ public abstract class Jyx2_UIBase : MonoBehaviour
 			(this as IUIAnimator).DoShowAnimator();
 		}
 
-		if (IsBlockControl && !IsChangedBlockControl && LevelMaster.Instance != null && !BattleManager.Instance.IsInBattle && LevelMaster.Instance.IsPlayerCanControl())
+		if (IsBlockControl && !IsChangedBlockControl && LevelMaster.Instance != null && !BattleManager.Instance.IsInBattle && LevelMaster.Instance.GetPlayer().locomotionController.playerControllable)
 		{
 			IsChangedBlockControl = true;
-			LevelMaster.Instance.SetPlayerCanController(false);
+			LevelMaster.Instance.GetPlayer().locomotionController.playerControllable = false;
 		}
 
 		VisibilityToggled?.Invoke(this, true);
@@ -122,7 +123,7 @@ public abstract class Jyx2_UIBase : MonoBehaviour
 		if (IsBlockControl && IsChangedBlockControl)
 		{
 			IsChangedBlockControl = false;
-			LevelMaster.Instance.SetPlayerCanController(true);
+			LevelMaster.Instance.GetPlayer().locomotionController.playerControllable = true;
 		}
 
 		VisibilityToggled.Invoke(this, false);

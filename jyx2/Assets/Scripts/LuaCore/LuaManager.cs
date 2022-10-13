@@ -20,7 +20,6 @@ namespace Jyx2
 {
     public class LuaManager
     {
-        public const string LUA_ROOT_MENU = "";
         public const bool LUAJIT_ENABLE = false;
 
 
@@ -31,14 +30,13 @@ namespace Jyx2
             return _inited;
         }
 
-        public static object GetLuaEnv()
+        public static LuaEnv GetLuaEnv()
         {
-            return luaEnv as object;
+            return luaEnv;
         }
 
-        private static void Clear()
+        public static void Clear()
         {
-
             _inited = false;
 
             //ConfigManager.Reset();
@@ -89,6 +87,34 @@ namespace Jyx2
 
             _inited = true;
             //LoadLuaFiles();
+        }
+
+        public static void PreloadLua()
+        {
+            if (RuntimeEnvSetup.CurrentModConfig == null)
+            {
+                Debug.LogError("错误：没初始化运行环境就调用了preloadlua");
+                return;
+            }
+
+            if (RuntimeEnvSetup.CurrentModConfig.PreloadedLua != null)
+            {
+                UniTask.Void(async () =>
+                {
+                    foreach (var lua in RuntimeEnvSetup.CurrentModConfig.PreloadedLua)
+                    {
+                        Debug.Log($"preloading {lua}...");
+                        if (__luaMapper.ContainsKey(lua))
+                        {
+                            await LuaExecutor.Execute(lua);
+                        }
+                        
+                        Debug.Log($"load {lua} finished.");
+                    }
+                    
+                    Debug.Log("PreloadLua finished");
+                });
+            }
         }
 
         private static object[] Call(string functionName, params object[] paras)
@@ -211,25 +237,10 @@ namespace Jyx2
                 __luaMapper[a.name] = Encoding.UTF8.GetBytes(a.text);
             }
         }
-        
-        private static readonly string[] files = new string[]{
-            "main.lua",
-        };
-        
+
         
         private static bool _inited = false;
         private static LuaEnv luaEnv;
-        private static void LoadLuaFiles()
-        {
-            LuaTable files = Call<LuaTable>("main_getLuaFiles");
-            foreach (var luaFile in files.Cast<List<string>>())
-            {
-                //HSUtils.Log(luaFile);
-                luaEnv.DoString(LoadLua(LUA_ROOT_MENU + luaFile.Replace(".lua", "")), luaFile);
-            }
-            files.Dispose();
-            files = null;
-        }
 
         private static Dictionary<string, byte[]> __luaMapper = null;
 

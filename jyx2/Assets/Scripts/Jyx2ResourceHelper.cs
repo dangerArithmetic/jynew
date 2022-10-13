@@ -10,15 +10,10 @@
 
 
 using Jyx2;
-using Lean.Pool;
 using System;
-using System.Collections.Generic;
 using System.IO;
-using System.Linq;
-using System.Threading.Tasks;
 using Cysharp.Threading.Tasks;
-using Jyx2.MOD;
-using Jyx2.Middleware;
+using Jyx2.EventsGraph;
 using Jyx2.ResourceManagement;
 using Jyx2Configs;
 using ProtoBuf;
@@ -46,18 +41,8 @@ namespace Jyx2
 
 public static class Jyx2ResourceHelper
 {
-    private static bool _isInited = false;
-    
-    public static async Task Init()
+    public static async UniTask Init()
     {
-        //已经初始化过了
-        if (_isInited)
-        {
-            return;
-        }
-
-        _isInited = true;
-
         //模型池
         var allModels = await ResLoader.LoadAssets<ModelAsset>("Assets/Models/");
         if (allModels != null)
@@ -84,6 +69,12 @@ public static class Jyx2ResourceHelper
         
         //执行lua根文件
         LuaManager.Init(GlobalAssetConfig.Instance.rootLuaFile.text);
+        
+        //如果有热更新文件，执行热更新
+        LuaManager.PreloadLua();
+        
+        //IFix热更新文件
+        await IFixManager.LoadPatch();
     }
 
     public static GameObject GetCachedPrefab(string path)

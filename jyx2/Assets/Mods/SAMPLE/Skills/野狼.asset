@@ -13,9 +13,9 @@ MonoBehaviour:
   m_Name: "\u91CE\u72FC"
   m_EditorClassIdentifier: 
   weaponCode: 0
-  behitClip: {fileID: 7400000, guid: 1464a90bc2e007a4f9e108c0f64a57e8, type: 3}
+  behitClip: {fileID: 7400000, guid: 012793fe0dff24a4cbb12f42f8e47787, type: 2}
   moveClip: {fileID: 7400000, guid: 57f397574dd47ec4686017f1d065fa57, type: 3}
-  idleClip: {fileID: 7400000, guid: 288e7821045c51d47a30248c5d65efb6, type: 3}
+  idleClip: {fileID: 7400000, guid: a8f061e275631314999c932beb6a9358, type: 3}
   attackClip: {fileID: 7400000, guid: ab27dc7bd077f5745aba43ee8187da79, type: 3}
   stunClip: {fileID: 0}
   animationDelay: 0
@@ -38,6 +38,6 @@ MonoBehaviour:
   audioDelay: 0.5
   audio2: {fileID: 0}
   audioDelay2: 0.5
-  controller: {fileID: 9100000, guid: f609b3f34cb8277439c35dc10ad42d49, type: 2}
+  controller: {fileID: 0}
   isGhostShadowOn: 0
   ghostShadowColor: {r: 0, g: 0, b: 1, a: 1}

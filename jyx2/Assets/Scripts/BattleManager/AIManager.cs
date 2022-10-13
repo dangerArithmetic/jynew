@@ -285,18 +285,28 @@ public class AIManager
             }
 
             //医疗算分
-            if (skill is HealSkillCastInstance)
+            if (skill.GetDamageType() == 4)
             {
-                if (targetRole.Hp < 0.2 * targetRole.MaxHp)
+                if (skill is HealSkillCastInstance)
                 {
-                    score = result.heal;
+                    if (targetRole.Hp < 0.2 * targetRole.MaxHp)
+                    {
+                        score = result.heal;
+                    }
+                }
+                else
+                {
+                    if (targetRole.Hp < 0.5 * targetRole.MaxHp)
+                    {
+                        score = result.heal;
+                    }
                 }
             }
-            
+
             //用毒算分
             if (skill is PoisonSkillCastInstance)
             {
-                score = Mathf.Min(GameConst.MAX_POISON - targetRole.Poison, caster.UsePoison) * 0.5;
+                score = Mathf.Min(GameConst.MAX_POISON - targetRole.Poison, caster.UsePoison) * 0.1;
                 if (targetRole.Hp < 10)
                 {
                     score = 1;
@@ -310,7 +320,7 @@ public class AIManager
                 {
                     score = targetRole.Hp * 1.25;
                 }
-                score *= 0.5;//暗器分值略低
+                score *= 0.1;//暗器分值略低
             }
         }
 
@@ -601,7 +611,7 @@ public class AIManager
             //点、线、十字的伤害，距离就是两人相差的格子数，最小为1。
             //面攻击时，距离是两人相差的格子数＋敌人到攻击点的距离。
             int dist = r1.Pos.GetDistance(r2.Pos);
-            if (skill.GetCoverType() == SkillCoverType.RECT)
+            if (skill.GetCoverType() == SkillCoverType.RECT || skill.GetCoverType() == SkillCoverType.RHOMBUS)
             {
                 dist += blockVector.GetDistance(r2.Pos);
             }
@@ -701,7 +711,7 @@ public class AIManager
             foreach (var kv in GameRuntimeData.Instance.Items)
             {
                 string id = kv.Key;
-                int count = kv.Value;
+                int count = kv.Value.Item1;
 
                 var item = GameConfigDatabase.Instance.Get<Jyx2ConfigItem>(id);
                 if ((int)item.ItemType == itemType)

@@ -43,6 +43,8 @@ public partial class GameMainMenu : Jyx2_UIBase
 	private const int SettingsIndex = 2;
 	private const int QuitGameIndex = 3;
 
+	private string m_newName;
+
 	async void OnStart()
 	{
 		MainMenuTitles.SetActive(false);
@@ -68,9 +70,14 @@ public partial class GameMainMenu : Jyx2_UIBase
 		JudgeShowReleaseNotePanel();
 	}
 
+	private void OnEnable()
+	{
+		transform.Find("mainPanel/ExtendPanel")?.gameObject.SetActive(true); 
+	}
+
 	void JudgeShowReleaseNotePanel()
 	{
-		//每个更新显示一次
+		//每个更新显示一次 这里就不用Jyx2_PlayerPrefs了
 		string key = "RELEASENOTE_" + Application.version;
 		if (!PlayerPrefs.HasKey(key))
 		{
@@ -277,24 +284,24 @@ public partial class GameMainMenu : Jyx2_UIBase
 		//---------------------------------------------------------------------------
 		//特定位置的翻译【读档时候的Title显示】
 		//---------------------------------------------------------------------------
-		await Jyx2_UIManager.Instance.ShowUIAsync(nameof(SavePanel), new Action<int>((index) =>
+		await Jyx2_UIManager.Instance.ShowUIAsync(nameof(SavePanel), new Action<int>((archiveIndex) =>
 		{
-			var summary = GameSaveSummary.Load(index);
-			if (summary.ModId != null && !summary.ModId.Equals(RuntimeEnvSetup.CurrentModId))
+			var summary = GameSaveSummary.Load(archiveIndex);
+			if (summary.ModId != null && !summary.ModId.ToLower().Equals(RuntimeEnvSetup.CurrentModId.ToLower()))
 			{
 				List<string> selectionContent = new List<string>() {"是(Y)", "否(N)"};
 				string msg = "该存档MOD不匹配，载入可能导致数据错乱，是否继续？";
-				Jyx2_UIManager.Instance.ShowUIAsync(nameof(ChatUIPanel), ChatType.Selection, "0", msg, selectionContent, new Action<int>((index) =>
+				Jyx2_UIManager.Instance.ShowUIAsync(nameof(ChatUIPanel), ChatType.Selection, "0", msg, selectionContent, new Action<int>((selection) =>
 				{
-					if (index == 0)
+					if (selection == 0)
 					{
-						StoryEngine.DoLoadGame(index);
+						StoryEngine.DoLoadGame(archiveIndex);
 					}
 				})).Forget();
 			}
 			else
 			{
-				if (!StoryEngine.DoLoadGame(index) && m_panelType == PanelType.LoadGamePage)
+				if (!StoryEngine.DoLoadGame(archiveIndex) && m_panelType == PanelType.LoadGamePage)
 				{
 					OnNewGame();
 				}
@@ -309,25 +316,37 @@ public partial class GameMainMenu : Jyx2_UIBase
 
 	public void OnQuitGameClicked()
 	{
+#if UNITY_EDITOR
+		UnityEditor.EditorApplication.isPlaying = false;
+#else
 		Application.Quit();
+#endif
 	}
 
-	public void OnCreateBtnClicked()
+	private void setPlayerName()
 	{
-		string newName = this.NameInput_InputField.text;
-
 		//todo:去掉特殊符号
-		if (string.IsNullOrWhiteSpace(newName))
+		if (string.IsNullOrWhiteSpace(m_newName))
 			return;
 
 		m_panelType = PanelType.PropertyPage;
 		//todo:给玩家提示
 		RoleInstance role = GameRuntimeData.Instance.Player;
-		role.Name = newName;
+		role.Name = m_newName;
+		m_randomProperty.ShowComponent();
+		DoGeneratePlayerRole();
+	}
 
+	public void OnCreateBtnClicked()
+	{
+		if (m_newName == null)
+		{
+			m_newName = this.NameInput_InputField.text;
+		}
+		setPlayerName();
+		
 		this.InputNamePanel_RectTransform.gameObject.SetActive(false);
 		this.StartNewRolePanel_RectTransform.gameObject.SetActive(true);
-		m_randomProperty.ShowComponent();
 		// generate random property at randomP panel first show
 		// added by eaphone at 2021/05/23
 		OnCreateRoleNoClick();
@@ -335,12 +354,23 @@ public partial class GameMainMenu : Jyx2_UIBase
 
 	void OnNewGame()
 	{
-		var runtime = GameRuntimeData.CreateNew();
+		GameRuntimeData.CreateNew();
 
 		m_panelType = PanelType.NewGamePage;
 		this.homeBtnAndTxtPanel_RectTransform.gameObject.SetActive(false);
-		this.InputNamePanel_RectTransform.gameObject.SetActive(true);
-		NameInput_InputField.ActivateInputField();
+
+		Debug.Log(RuntimeEnvSetup.CurrentModConfig.PlayerName);
+		if (!string.IsNullOrEmpty(RuntimeEnvSetup.CurrentModConfig.PlayerName))
+		{
+			m_newName = RuntimeEnvSetup.CurrentModConfig.PlayerName;
+			setPlayerName();
+			this.StartNewRolePanel_RectTransform.gameObject.SetActive(true);
+		}
+		else
+		{
+			this.InputNamePanel_RectTransform.gameObject.SetActive(true);
+			NameInput_InputField.ActivateInputField();
+		}
 	}
 
 	private void RegisterEvent()

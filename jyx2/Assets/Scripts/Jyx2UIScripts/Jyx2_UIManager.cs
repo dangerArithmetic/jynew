@@ -127,7 +127,7 @@ public class Jyx2_UIManager : MonoBehaviour
         GraphicSetting.GlobalSetting.Execute();
     }
 
-    Transform GetUIParent(UILayer layer) 
+    public Transform GetUIParent(UILayer layer) 
     {
         switch (layer) 
         {
@@ -170,6 +170,7 @@ public class Jyx2_UIManager : MonoBehaviour
 
             var prefab = await ResLoader.LoadAsset<GameObject>(uiPath);
             var go = Instantiate(prefab);
+            
             OnUILoaded(go);
         }
     }
@@ -320,5 +321,14 @@ public class Jyx2_UIManager : MonoBehaviour
         {
             HideUI(item.Key);
         }
+    }
+
+    public bool IsUIOpen(string uiName)
+    {
+        if (!m_uiDic.ContainsKey(uiName))
+            return false;
+        if (m_uiDic[uiName] == null)
+            return false;
+        return m_uiDic[uiName].gameObject.activeSelf;
     }
 }

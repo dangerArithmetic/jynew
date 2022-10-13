@@ -14,6 +14,7 @@ using System.Linq;
 using Jyx2Configs;
 using System.Collections.Generic;
 using UnityEngine.UI;
+using System.Text;
 
 public partial class MainUIPanel : Jyx2_UIBase, IUIAnimator
 {
@@ -45,6 +46,9 @@ public partial class MainUIPanel : Jyx2_UIBase, IUIAnimator
 	});
 	private bool initialized;
 
+
+	private StringBuilder coordinateBuilder = new StringBuilder();
+
 	public override void Update()
 	{
 		base.Update();
@@ -55,17 +59,35 @@ public partial class MainUIPanel : Jyx2_UIBase, IUIAnimator
 			initialized = true;
 		}
 
-		Compass.gameObject.SetActive(LevelMaster.Instance.IsInWorldMap && Jyx2LuaBridge.HaveItem(182));
+		ShowCompass(Jyx2LuaBridge.jyx2_GetFlagInt("获得罗盘") == 1);
+	}
+	public void ShowCompass(bool flag)
+	{
+		Compass.gameObject.SetActive(LevelMaster.Instance.IsInWorldMap && flag);
 		if (Compass.gameObject.activeSelf)
 		{
-			var p = LevelMaster.Instance.GetPlayerPosition();
-			var pString = (p.x + 242).ToString("F0") + "," + (p.z + 435).ToString("F0");
-			if (!LevelMaster.Instance.GetPlayer().IsOnBoat)
+			var player = LevelMaster.Instance.GetPlayer();
+			if (player == null)
+				return;
+			coordinateBuilder.Clear();
+
+			int offsetX = 242, offsetZ = 435;
+			var playerPosition = player.transform.position;
+			coordinateBuilder.Append(Mathf.Floor(playerPosition.x + offsetX));
+			coordinateBuilder.Append(",");
+			coordinateBuilder.Append(Mathf.Floor(playerPosition.z + offsetZ));
+
+			if (!player.IsOnBoat)
 			{
-				var b = LevelMaster.Instance.GetPlayer().GetBoatPosition();
-				pString += "(" + (b.x + 242).ToString("F0") + "," + (b.z + 435).ToString("F0") + ")";
+				var boatPosition = player.GetBoatPosition();
+				coordinateBuilder.Append("(");
+				coordinateBuilder.Append(Mathf.Round(boatPosition.x + offsetX));
+				coordinateBuilder.Append(",");
+				coordinateBuilder.Append(Mathf.Round(boatPosition.z + offsetZ));
+				coordinateBuilder.Append(")");
+
 			}
-			Compass.text = pString;
+			Compass.text = coordinateBuilder.ToString();
 		}
 	}
 
@@ -306,21 +328,21 @@ public partial class MainUIPanel : Jyx2_UIBase, IUIAnimator
 	{
 		GlobalHotkeyManager.Instance.RegistHotkey(this, KeyCode.Escape, () =>
 		{
-			if (LevelMaster.Instance.IsPlayerCanControl())
+			if (LevelMaster.Instance.GetPlayer().locomotionController.playerControllable)
 			{
 				OnSystemBtnClick();
 			}
 		});
 		GlobalHotkeyManager.Instance.RegistHotkey(this, KeyCode.X, () =>
 		{
-			if (LevelMaster.Instance.IsPlayerCanControl())
+			if (LevelMaster.Instance.GetPlayer().locomotionController.playerControllable)
 			{
 				OnXiakeBtnClick();
 			}
 		});
 		GlobalHotkeyManager.Instance.RegistHotkey(this, KeyCode.B, () =>
 		{
-			if (LevelMaster.Instance.IsPlayerCanControl())
+			if (LevelMaster.Instance.GetPlayer().locomotionController.playerControllable)
 			{
 				OnBagBtnClick();
 			}

@@ -92,14 +92,15 @@ public class StoryEngine : MonoBehaviour
             {
                 throw new Exception("存档中的地图找不到！");
             }
-            
+            LevelMaster.LastGameMap = null;
             LevelLoader.LoadGameMap(map, loadPara,
                 () => { LevelMaster.Instance.TryBindPlayer().Forget(); });
             return true;
         }
         catch (Exception e)
         {
-            MessageBox.Create("错误，载入存档失败。请检查版本号和MOD是否匹配。");
+            MessageBox.ShowMessage("错误，载入存档失败。请检查版本号和MOD是否匹配。");
+            Debug.LogError("存档异常" + e.Message);
             return true;
         }
     }
