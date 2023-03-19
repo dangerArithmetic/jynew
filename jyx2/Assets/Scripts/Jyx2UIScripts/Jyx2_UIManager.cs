@@ -15,8 +15,8 @@ using System.Linq;
 using Cysharp.Threading.Tasks;
 using i18n.TranslatorDef;
 using Jyx2;
-using Jyx2.MOD;
 using Jyx2.ResourceManagement;
+using Rewired.Integration.UnityUI;
 using UnityEngine;
 
 public enum UILayer 
@@ -36,15 +36,34 @@ public class Jyx2_UIManager : MonoBehaviour
         {
             if (_instace == null) 
             {
-                var prefab = Resources.Load<GameObject>("MainCanvas");
-                var obj = Instantiate(prefab);
-                obj.gameObject.name = "MainCanvas";
-                _instace = obj.GetComponent<Jyx2_UIManager>();
+                var rewiredObj = FindObjectOfType<Rewired.InputManager>();
+                if(rewiredObj == null)
+                {
+                    var inputMgrPrefab = Resources.Load<GameObject>("RewiredInputManager");
+                    var go = Instantiate(inputMgrPrefab);
+                    rewiredObj = go.GetComponent<Rewired.InputManager>();
+                }
+
+                var canvasPrefab = Resources.Load<GameObject>("MainCanvas");
+                var canvsGo = Instantiate(canvasPrefab);
+                canvsGo.name = "MainCanvas";
+                _instace = canvsGo.GetComponent<Jyx2_UIManager>();
                 _instace.Init();
+
+                var rewiredInputModule = canvsGo.GetComponentInChildren<RewiredStandaloneInputModule>();
+                rewiredInputModule.RewiredInputManager = rewiredObj;
+
                 DontDestroyOnLoad(_instace);
             }
             return _instace;
         }
+    }
+
+    public static void Clear()
+    {
+        if (_instace == null) return;
+        Destroy(_instace.gameObject);
+        _instace = null;
     }
 
     private Transform m_mainParent;
@@ -54,8 +73,8 @@ public class Jyx2_UIManager : MonoBehaviour
 
     private Dictionary<string, Jyx2_UIBase> m_uiDic = new Dictionary<string, Jyx2_UIBase>();
     private Jyx2_UIBase m_currentMainUI;
-    private Stack<Jyx2_UIBase> m_normalUIStack = new Stack<Jyx2_UIBase>();
-    private Stack<Jyx2_UIBase> m_PopUIStack = new Stack<Jyx2_UIBase>();
+    private List<Jyx2_UIBase> m_NormalUIs = new List<Jyx2_UIBase>();
+    private List<Jyx2_UIBase> m_PopUIs = new List<Jyx2_UIBase>();
 
     void Init()
     {
@@ -78,7 +97,7 @@ public class Jyx2_UIManager : MonoBehaviour
 		}
 		else if (ui.Layer == UILayer.NormalUI)
 		{
-            Jyx2_UIBase currentUi = m_normalUIStack.Count > 0 ? m_normalUIStack.Peek() : null;
+            Jyx2_UIBase currentUi = m_NormalUIs.LastOrDefault();
             if (currentUi == null)
                 return true;
             
@@ -86,7 +105,7 @@ public class Jyx2_UIManager : MonoBehaviour
 		}
         else if (ui.Layer == UILayer.PopupUI)
 		{
-            return (m_PopUIStack.Count > 0 ? m_PopUIStack.Peek() : null) == ui;
+            return m_PopUIs.LastOrDefault() == ui;
 		}
         else if (ui.Layer == UILayer.Top)
 		{
@@ -98,18 +117,18 @@ public class Jyx2_UIManager : MonoBehaviour
 
 	private bool noShowingNormalUi()
 	{
-        return !m_normalUIStack
+        return !m_NormalUIs
             .Any(ui => ui.gameObject.activeSelf);
 	}
 
 	private bool noInterferingPopupUI()
 	{
         //common tips panel has no interaction, doesn't count towards active uis
-        return !m_normalUIStack
-            .Any(ui => ui.gameObject.activeSelf) || (m_PopUIStack.All(p => p is CommonTipsUIPanel));
+        return !m_NormalUIs
+            .Any(ui => ui.gameObject.activeSelf) || (m_PopUIs.All(p => p is CommonTipsUIPanel));
 	}
 
-	public async void GameStart()
+	public async UniTask GameStart()
     {
         // await UniTask.WaitForEndOfFrame();
         await RuntimeEnvSetup.Setup();
@@ -174,6 +193,38 @@ public class Jyx2_UIManager : MonoBehaviour
             OnUILoaded(go);
         }
     }
+    
+    public async UniTask<T> ShowUIAsync<T>(params object[] allParams) where T:Jyx2_UIBase
+    {
+        var uiName = typeof(T).Name;
+        await ShowUIAsync(uiName, allParams);
+        return GetUI<T>();
+    }
+    
+    public T ShowUI<T>(params object[] allParams) where T : Jyx2_UIBase
+    {
+        var uiName = typeof(T).Name;
+        Jyx2_UIBase uibase;
+        if (m_uiDic.ContainsKey(uiName))
+        {
+            uibase = m_uiDic[uiName];
+            if (uibase.IsOnly)//如果这个层唯一存在 那么先关闭其他
+                PopAllUI(uibase.Layer);
+            PushUI(uibase);
+            uibase.Show(allParams);
+        }
+        else
+        {
+            _loadingUIParams[uiName] = allParams;
+            string uiPath = string.Format(GameConst.UI_PREFAB_PATH, uiName);
+
+            var prefab = ResLoader.LoadAssetSync<GameObject>(uiPath);
+            var go = Instantiate(prefab);
+            OnUILoaded(go);
+            uibase = go.GetComponent<T>();
+        }
+        return uibase as T;
+    }
 
     //UI加载完后的回调
     void OnUILoaded(GameObject go) 
@@ -186,9 +237,6 @@ public class Jyx2_UIManager : MonoBehaviour
         Transform parent = GetUIParent(uibase.Layer);
         go.transform.SetParent(parent);
 
-		//听取ui的 OnVisibilityToggle event
-		uibase.VisibilityToggled += Uibase_OnVisibilityToggle;
-
         uibase.Init();
         m_uiDic[uiName] = uibase;
         if (uibase.IsOnly)//如果这个层唯一存在 那么先关闭其他
@@ -198,13 +246,6 @@ public class Jyx2_UIManager : MonoBehaviour
         uibase.Show(allParams);
         _loadingUIParams.Remove(uiName);
     }
-
-	private void Uibase_OnVisibilityToggle(Jyx2_UIBase ui, bool obj)
-	{
-		UIVisibilityToggled?.Invoke(ui, obj);
-	}
-
-    public event Action<Jyx2_UIBase, bool> UIVisibilityToggled;
 
 	//显示主界面 LoadingPanel中加载完场景调用 移到这里来 方便修改
 	public async UniTask ShowMainUI()
@@ -238,10 +279,10 @@ public class Jyx2_UIManager : MonoBehaviour
                 m_currentMainUI = uibase;
                 break;
             case UILayer.NormalUI:
-                m_normalUIStack.Push(uibase);
+                m_NormalUIs.Add(uibase);
                 break;
             case UILayer.PopupUI:
-                m_PopUIStack.Push(uibase);
+                m_PopUIs.Add(uibase);
                 break;
         }
     }
@@ -250,31 +291,30 @@ public class Jyx2_UIManager : MonoBehaviour
     {
         if (layer == UILayer.NormalUI)
         {
-            PopUI(null, m_normalUIStack);
+            ClearAndHide(m_NormalUIs);
         }
         else if (layer == UILayer.PopupUI) 
         {
-            PopUI(null, m_PopUIStack);
+            ClearAndHide(m_PopUIs);
         }
     }
 
-    void PopUI(Jyx2_UIBase ui, Stack<Jyx2_UIBase> uiStack) 
+    void ClearAndHide(List<Jyx2_UIBase> uiList)
     {
-        if (!uiStack.Contains(ui))
-            return;
-        Jyx2_UIBase node = uiStack.Pop();
-        while (node) 
+        foreach (var ui in uiList)
         {
-            if (node == ui) 
-            {
-                node.Hide();
-                return;
-            }
-            if (uiStack.Count <= 0)
-                return;
-            node.Hide();
-            node = uiStack.Pop();
+            if(ui != null)
+                ui.Hide();
         }
+        uiList.Clear();
+    }
+
+    void PopUI(Jyx2_UIBase ui, List<Jyx2_UIBase> uiList) 
+    {
+        if (!uiList.Contains(ui))
+            return;
+        uiList.Remove(ui);
+        ui.Hide();
     }
 
     public void HideUI(string uiName) 
@@ -282,28 +322,44 @@ public class Jyx2_UIManager : MonoBehaviour
         if (!m_uiDic.ContainsKey(uiName))
             return;
         Jyx2_UIBase uibase = m_uiDic[uiName];
-        if (m_normalUIStack.Contains(uibase))
+        if (m_NormalUIs.Contains(uibase))
         {
-            PopUI(uibase, m_normalUIStack);
+            PopUI(uibase, m_NormalUIs);
         }
-        else if (m_PopUIStack.Contains(uibase))
+        else if (m_PopUIs.Contains(uibase))
         {
-            PopUI(uibase, m_PopUIStack);
+            PopUI(uibase, m_PopUIs);
         }
-        else if (uibase.Layer == UILayer.MainUI)
-            uibase.Hide();
         else
             uibase.Hide();
     }
-
-    public void SetMainUIActive(bool active) 
+    public void HideUI<T>() where T : Jyx2_UIBase
     {
-        if (m_currentMainUI == null)
-            return;
-        if (active)
-            m_currentMainUI.Show();
-        else
-            m_currentMainUI.Hide();
+        var uiName = typeof(T).Name;
+        HideUI(uiName);
+    }
+
+    public void HideAllUI()
+    {
+        foreach (var item in m_uiDic)
+        {
+            HideUI(item.Key);
+        }
+    }
+
+
+    public void CloseAllUI()
+    {
+        //Keys仍然会引用Dictionary内部元素迭代 用一个新List暂存来遍历
+        var uiNames = m_uiDic.Keys.ToList(); 
+        foreach (var uiName in uiNames)
+        {
+            HideUI(uiName);
+            Destroy(m_uiDic[uiName].gameObject);
+            m_uiDic.Remove(uiName);
+        }
+        m_NormalUIs.Clear();
+        m_PopUIs.Clear();
     }
 
     public Camera GetUICamera() 
@@ -314,15 +370,15 @@ public class Jyx2_UIManager : MonoBehaviour
         return Camera.main;
     }
 
-    //关闭所有的UI
-    public void CloseAllUI() 
+    public T GetUI<T>() where T : Jyx2_UIBase
     {
-        foreach (var item in m_uiDic)
+        var uiName = typeof(T).Name;
+        if(m_uiDic.TryGetValue(uiName, out Jyx2_UIBase result))
         {
-            HideUI(item.Key);
+            return result as T;
         }
+        return null;
     }
-
     public bool IsUIOpen(string uiName)
     {
         if (!m_uiDic.ContainsKey(uiName))

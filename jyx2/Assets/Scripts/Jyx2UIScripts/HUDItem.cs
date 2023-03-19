@@ -18,6 +18,19 @@ public class HUDItem : MonoBehaviour
     HPBar hpBar;
     RoleInstance currentRole;
     RectTransform rectTrans;
+
+    #region 血条预定义颜色
+
+    private static readonly Color AllyColor = Color.green;
+
+    private static readonly Color AllyPoisonColor = Color.cyan;
+
+    private static readonly Color EnemyColor = Color.red;
+
+    private static readonly Color EnemyPoisonColor = new Color(216f / 255, 0f, 189f / 255);
+
+    #endregion
+
     public void Init() 
     {
         hpBar = transform.Find("HpBar").GetComponent<HPBar>();
@@ -25,10 +38,13 @@ public class HUDItem : MonoBehaviour
         rectTrans = transform as RectTransform;
     }
 
+    private bool IsRoleNotValid => currentRole == null || currentRole.View == null || currentRole.IsDead();
+
+
     public void BindRole(RoleInstance role) 
     {
         currentRole = role;
-        UpdateAll();
+        RefreshHpBar();
     }
 
     int preHp = -1;
@@ -36,38 +52,57 @@ public class HUDItem : MonoBehaviour
     {
         if (currentRole == null)
             return;
+        CheckShouldHide();
         UpdatePosition();
-        if (!currentRole.View.HPBarIsDirty || currentRole.Hp == preHp)
+        TryUpdateHealthValue();
+    }
+
+    void CheckShouldHide()
+    {
+        if (IsRoleNotValid)
+            gameObject.SetActive(false);
+    }
+
+
+    void TryUpdateHealthValue()
+    {
+        if (IsRoleNotValid)
+            return;
+        if (!currentRole.View.HPBarIsDirty)
             return;
         currentRole.View.UnmarkHpBarIsDirty();
-        UpdateAll();
+        preHp = currentRole.Hp;
+        RefreshHpBar();
     }
 
-    void UpdateAll()
+    void RefreshHpBar()
     {
-        preHp = currentRole.Hp;
+        if (currentRole == null)
+            return;
         hpBar.SetValue((float)currentRole.Hp / currentRole.MaxHp);
         UpdateHpColor();
-        if (currentRole.IsDead())
-            transform.gameObject.SetActive(false);
     }
 
-    Vector3 hpPos;
-    void UpdatePosition() 
-    {
-        hpPos = Jyx2_UIManager.Instance.GetUICamera().WorldToScreenPoint(currentRole.View.transform.position);
-        rectTrans.position = hpPos;
-    }
 
     void UpdateHpColor()
     {
-        //hpBar.fillImage.sprite = null;
-        if (currentRole.Poison > 0) 
-        {
-            hpBar.fillImage.color = Color.cyan;
+        if (currentRole == null)
             return;
+        if (currentRole.Poison > 0)
+        {
+            hpBar.fillImage.color = currentRole.team == 0 ? AllyPoisonColor : EnemyPoisonColor;
         }
-        hpBar.fillImage.color = currentRole.team == 0 ? Color.green : Color.red;
+        else
+        {
+            hpBar.fillImage.color = currentRole.team == 0 ? AllyColor : EnemyColor;
+        }
+    }
+
+    void UpdatePosition() 
+    {
+        if (IsRoleNotValid)
+            return;
+        rectTrans.position = Jyx2_UIManager.Instance.GetUICamera().WorldToScreenPoint(currentRole.View.transform.position);
     }
 
     private void OnDisable()

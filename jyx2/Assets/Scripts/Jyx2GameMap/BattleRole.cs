@@ -18,7 +18,6 @@ using UnityEngine.AI;
 using Random = UnityEngine.Random;
 using Cysharp.Threading.Tasks;
 using Jyx2.Middleware;
-using Jyx2Configs;
 
 public class BattleRole : Jyx2AnimationBattleRole
 {
@@ -27,7 +26,7 @@ public class BattleRole : Jyx2AnimationBattleRole
     {
         get
         {
-            return DataInstance.Data.Model;
+            return DataInstance.Model;
         }
     }
 
@@ -411,7 +410,7 @@ public class BattleRole : Jyx2AnimationBattleRole
         else
         {
             //非人型等待动画完成后再隐藏，解决鳄鱼等角色死亡后血槽不消失问题 by Tomato
-            GameUtil.CallWithDelay(clip.length, () => { gameObject.SetActive(false); });
+            GameUtil.CallWithDelay(clip.length, () => { gameObject.SetActive(false); }, this);
         }
         
         m_Health = MapRoleHealth.Death;
@@ -476,6 +475,13 @@ public class BattleRole : Jyx2AnimationBattleRole
         if (modelAsset == null) return;
         
         var view = await modelAsset.GetView();
+
+        if (view == null)
+        {
+            Debug.LogError($"错误，角色预设 {modelAsset.name} 找不到view，请检查ModelAsset配置!");
+            return;
+        }
+        
         //要再等一帧
         await UniTask.WaitForEndOfFrame();
         

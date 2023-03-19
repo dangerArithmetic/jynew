@@ -28,8 +28,8 @@ using UnityEngine.SceneManagement;
 public class BattleboxManager : MonoBehaviour
 {
     //排除拥挤点半径
-    public float m_DetechRadius = 0.8f;
-    public float m_SpriteToGroundHeight = 0.01f;
+    public float m_DetechRadius = 0.5f;
+    public float m_blockTexMultiplier = 1.0f;
     public Color m_InvalidColor = new Color(1,1,1,0.2f);
     public const float BATTLEBLOCK_DECAL_ALPHA = 0.4f;
 
@@ -37,7 +37,7 @@ public class BattleboxManager : MonoBehaviour
     [HideInInspector]
     private string m_BattleboxSerializedData;
     
-    private SpriteRenderer _BlockPrefab;
+    private Vector3 _blockScale = BattleboxDataset.BlockLength * new Vector3(1, 1, 1);
 
     [HideInInspector]
     public BattleboxDataset m_Dataset;
@@ -51,6 +51,8 @@ public class BattleboxManager : MonoBehaviour
     private List<BattleBlockData> _rangeLayerBlocks = new List<BattleBlockData>();
     
     private GameObject _parent;
+    private GameObject _blockPrefab;
+
 
     // Use this for initialization
     void Awake()
@@ -60,6 +62,11 @@ public class BattleboxManager : MonoBehaviour
 
     public void Init()
     {
+        if (_blockPrefab == null)
+        {
+            _blockPrefab = Resources.Load<GameObject>("BattleboxBlock");
+        }
+        
         InitCollider();
 
         if (m_Dataset == null)
@@ -191,16 +198,16 @@ public class BattleboxManager : MonoBehaviour
         var bound = GetBounds();
         var sceneName = SceneManager.GetActiveScene().name;
         var objName = gameObject.name;
-        var length = bound.size.x;
-        var width = bound.size.z;
-        var minx = bound.min.x;
-        var miny = bound.min.z;
+        var length = bound.size.x;//包围战斗区域的盒子的长度
+        var width = bound.size.z;//包围战斗区域的盒子的宽度
+        var minx = bound.min.x;//包围战斗区域的盒子的最小x坐标
+        var miny = bound.min.z;//包围战斗区域的盒子的最小z坐标
+        var height = bound.size.y;//包围战斗区域的盒子的高度
+        var maxHeight = bound.max.y;//包围战斗区域的盒子的最大高度坐标
 
         m_Dataset = new BattleboxDataset(sceneName, objName, length, width, minx, miny);
         Debug.Log($"重新生成格子，x轴格子数{m_Dataset.CountX}, y轴格子数{m_Dataset.CountY}，理论总格子数目{m_Dataset.GetSizeCount()}");
 
-        var height = bound.size.y;
-        var maxHeight = bound.min.y + height;
         for (int i = 0; i < m_Dataset.CountX; i++)
         {
             for (int j = 0; j < m_Dataset.CountY; j++)
@@ -365,8 +372,7 @@ public class BattleboxManager : MonoBehaviour
     {
         var parent = FindOrCreateBlocksParent();
         
-        var block = Resources.Load<GameObject>("BattleboxBlock");
-        var obj = EasyDecal.Project(block, pos, Quaternion.identity);
+        var obj = EasyDecal.Project(_blockPrefab, pos, Quaternion.identity);
         obj.Quality = 2;
         obj.Distance = 0.05f;
         if (initRangeBlocks)
@@ -375,14 +381,17 @@ public class BattleboxManager : MonoBehaviour
         }
         
         obj.transform.SetParent(parent.transform, false);
+        obj.transform.localScale = m_blockTexMultiplier * _blockScale;
 
         var bPos = new BattleBlockVector(x, y);
-        var bbd = new BattleBlockData();
-        bbd.BattlePos = bPos;
-        bbd.WorldPos = pos;
-        bbd.gameObject = obj.gameObject;
-        bbd.BoxBlock = boxBlock;
-        
+        var bbd = new BattleBlockData
+        {
+            BattlePos = bPos,
+            WorldPos = pos,
+            gameObject = obj.gameObject,
+            BoxBlock = boxBlock
+        };
+
         if (initRangeBlocks)
         {
             _rangeLayerBlocks.Add(bbd);
@@ -422,6 +431,22 @@ public class BattleboxManager : MonoBehaviour
 
     public void DrawAreaBlocks(Vector3 center, int range, bool show = false)
     {
+        for (int i = 0; i < m_Dataset.CountX; i++)
+        {
+            for (int j = 0; j < m_Dataset.CountY; j++)
+            {
+                if (!m_Dataset.Exist(i, j)) continue;
+                var data = m_Dataset.GetBLock(i, j);
+                if (!data.IsValid) continue;
+                var pos = new Vector3(data.WorldPosX, data.WorldPosY, data.WorldPosZ);
+                var normal = new Vector3(data.NormalX, data.NormalY, data.NormalZ);
+                DrawBattleBlock(pos, data.IsValid ? Color.white : m_InvalidColor, i, j, normal, data);
+                DrawBattleBlock(pos, Color.blue, i, j, normal, data, true);
+            }
+        }
+
+        //由于格子变多了，需改成绘制所有格子 armodeniz
+        /*
         var xy = m_Dataset.GetXYIndex(center.x, center.z);
         var centerX = (int) xy.X;
         var centerY = (int) xy.Y;
@@ -437,6 +462,7 @@ public class BattleboxManager : MonoBehaviour
             DrawBattleBlock(pos, data.IsValid ? Color.white : m_InvalidColor, b.X, b.Y, normal, data);
             DrawBattleBlock(pos, Color.blue, b.X, b.Y, normal, data, true);
         }
+        */
         //for (int i = centerX - range; i < centerX + range; i++)
         //{
         //    if (i < 0 || i >= m_Dataset.CountX) continue;

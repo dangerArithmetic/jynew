@@ -21,6 +21,8 @@ util = require 'xlua.util'
 
 luaBridge = CS.Jyx2.Jyx2LuaBridge
 
+LuaEventDispatcher = require 'luaevent'
+
 function combine(func1, func2)
 	return function()
 		local rst = func1()
@@ -38,7 +40,9 @@ AskBattle = util.async_to_sync(luaBridge.AskBattle)--询问是否战斗
 AskJoin = util.async_to_sync(luaBridge.AskJoin)--询问角色是否加入
 AskRest = util.async_to_sync(luaBridge.AskRest)--询问是否进行休息
 LightScence = util.async_to_sync(luaBridge.LightScence)--场景变亮
+LightScene = LightScence --修复拼写错误
 DarkScence = util.async_to_sync(luaBridge.DarkScence)--场景变暗
+DarkScene = DarkScence --修复拼写错误
 ShowEthics = util.async_to_sync(luaBridge.ShowEthics)--显示道德
 ShowRepute = util.async_to_sync(luaBridge.ShowRepute)--显示声望
 ShowMessage = util.async_to_sync(luaBridge.ShowMessage)--显示信息确认框
@@ -105,6 +109,7 @@ EndAmination = luaBridge.EndAmination--结局动画
 SetSexual = luaBridge.SetSexual--设定性别
 PlayMusic = luaBridge.PlayMusic--播放音乐
 PlayWave = luaBridge.PlayWave--播放音效
+ShowToast = luaBridge.ShowToast --显示提示信息
 
 
 jyx2_ReplaceSceneObject = luaBridge.jyx2_ReplaceSceneObject--替换场景内容（同步存档）
@@ -130,6 +135,7 @@ GetFlagInt = luaBridge.jyx2_GetFlagInt
 
 RestFight = luaBridge.RestFight--野外休息
 JudgeIQ = luaBridge.JudgeIQ--判断IQ
+AddAttr = luaBridge.AddAttr--增加角色属性通用函数
 AddHeal = luaBridge.AddHeal--增加医疗
 AddDefence = luaBridge.AddDefence--增加防御
 AddQuanzhang = luaBridge.AddQuanzhang--增加拳掌
@@ -175,6 +181,68 @@ AddLevelreturnUper = luaBridge.AddLevelreturnUper --加等级并返回实际增�
 GetTeamMaxLevel = luaBridge.GetTeamMaxLevel--获取队伍最大等级
 GetCurrentEventID = luaBridge.GetCurrentEventID--获取当前事件ID
 JudgePointEventNum = luaBridge.JudgePointEventNum--判断指定触发器的交互事件
+GetMoneyCount = luaBridge.GetMoneyCount--获取金钱数量
+GetImbalancedRandomInt = luaBridge.GetImbalancedRandomInt--获取不平衡随机数
+
+
+--场景API
+scene_api = {}
+
+scene_api.BindEvent = luaBridge.FastBindEventToObj --快速绑定交互事件到物体
+scene_api.Register = luaBridge.RegisterDynamicSceneObj
+scene_api.SetActive = luaBridge.DynamicSceneObjSetActive
+scene_api.SetInt = luaBridge.SetSceneFlagInt
+scene_api.GetInt = luaBridge.GetSceneFlagInt
+scene_api.SetString = luaBridge.SetSceneFlagString
+scene_api.GetString = luaBridge.GetSceneFlagString
+scene_api.SetBool = luaBridge.SetSceneFlagBool
+scene_api.GetBool = luaBridge.GetSceneFlagBool
+scene_api.Dark = util.async_to_sync(luaBridge.DarkScence)--场景变暗
+scene_api.Light = util.async_to_sync(luaBridge.LightScence)--场景变亮
+
+--每个场景只会调用一次的方法
+scene_api.CallOnce = function (func)
+	local alreadyAccess = scene_api.GetBool("call_once_func")
+	if(alreadyAccess == false) then
+		func()
+		scene_api.SetBool("call_once_func", true)
+		return true
+	end
+	return false
+end
+
+--只调用一次，写到flag里去
+scene_api.CallOnceWithFlag = function (func, flag)
+	local alreadyAccess = scene_api.GetBool(flag)
+	if(alreadyAccess == false) then
+		func()
+		scene_api.SetBool(flag, true)
+		return true
+	end
+	return false
+end
+
+--普通信息显示
+function Info(msg)
+	Talk(0, msg, "", 2)
+end
+
+
+--高级扩展API
+TryBattleWithConfig = util.async_to_sync(luaBridge.TryBattleWithConfig)--尝试战斗
+
+
+--封装读取配置表的API 现在不用了，配置表已经转到Lua侧
+--使用示例 GetConfigTableItem(CS.Jyx2Configs.Jyx2ConfigItem, 5) 
+--获得道具配置表的第五项
+--[[function GetConfigTableItem(type, key)
+	local funcGeneric = xlua.get_generic_method(CS.Jyx2Configs.GameConfigDatabase, "Get")
+	local funCall = funcGeneric(type)
+	local item = funCall(CS.Jyx2Configs.GameConfigDatabase.Instance, key)
+	return item
+end
+]]
+
 function main_getLuaFiles()
 	return {}
 end 

@@ -15,6 +15,21 @@ using i18n.TranslatorDef;
 using Jyx2;
 using UnityEngine;
 
+public enum Jyx2_MpType
+{
+    Yin = 0,     //阴性内力
+    Yang = 1,    //阳性内力
+    Neutral = 2, //中性内力
+}
+
+public enum Jyx2_GameDifficulty
+{
+    Simple = 0,
+    Normal = 1,
+    Hard = 2,
+}
+
+
 public struct PropertyItem 
 {
     public int ID;
@@ -79,6 +94,8 @@ public class GameConst
     public static int MAX_DEPOISON => GameSettings.GetInt(nameof(MAX_DEPOISON));
     public static int MAX_ANTIPOISON => GameSettings.GetInt(nameof(MAX_ANTIPOISON));
     public static int MAX_HURT => GameSettings.GetInt(nameof(MAX_HURT));
+    
+    public static float CAM_SMOOTHING => GameSettings.GetFloat(nameof(CAM_SMOOTHING), 3f);
 
     public static int GAME_START_MUSIC_ID => GameSettings.GetInt(nameof(GAME_START_MUSIC_ID));
     /// <summary>
@@ -152,7 +169,12 @@ public class GameConst
     }
 
     private static List<int> _levelUpExpListCache = null;
-    
+
+
+    #region 体力配置相关
+
+    #endregion
+
     [Obsolete]
     public const string UI_PREFAB_PATH = "Assets/Prefabs/Jyx2UI/{0}.prefab";
     public static Dictionary<string, PropertyItem> ProItemDic = new Dictionary<string, PropertyItem>()
@@ -188,7 +210,7 @@ public class GameConst
         //---------------------------------------------------------------------------
         //特定位置的翻译【MainMenu右下角当前版本的翻译】
         //---------------------------------------------------------------------------
-        ["0"] = new PropertyItem(0, "MpType", "内力性质".GetContent(nameof(GameConst)), 1, 0),
+        ["0"] = new PropertyItem(0, "MpType", "内力性质".GetContent(nameof(GameConst)), (int)Jyx2_MpType.Yang, (int)Jyx2_MpType.Yin),
         ["1"] = new PropertyItem(1, "MaxMp", "内力".GetContent(nameof(GameConst)), 40, 30),//创角用到 特殊
         ["2"] = new PropertyItem(2, "Attack", "武力".GetContent(nameof(GameConst)), 30, 20),//创角用到 特殊
         ["3"] = new PropertyItem(3, "Qinggong", "轻功".GetContent(nameof(GameConst)), 30, 20),
@@ -224,7 +246,7 @@ public class GameConst
     };
 
     //存档的数量
-    public const int SAVE_COUNT = 3;
+    public static int SAVE_COUNT => GameSettings.GetInt(nameof(SAVE_COUNT), 3);
     public static string GetUPNumber(int index)
     {
         switch (index)

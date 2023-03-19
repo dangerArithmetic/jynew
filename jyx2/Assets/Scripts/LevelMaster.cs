@@ -15,9 +15,11 @@ using System;
 using System.Collections;
 using Cinemachine;
 using Cysharp.Threading.Tasks;
-using Jyx2Configs;
 using Application = UnityEngine.Application;
 using UnityEngine.UI;
+using Jyx2.InputCore;
+using Jyx2.MOD.ModV2;
+using Sirenix.Utilities;
 
 public class LevelMaster : MonoBehaviour
 {
@@ -64,10 +66,10 @@ public class LevelMaster : MonoBehaviour
 
 	CameraHelper m_CameraHelper;
 
-	public static Jyx2ConfigMap LastGameMap = null; //前一个地图
-	private static Jyx2ConfigMap _currentMap;
+	public static LMapConfig LastGameMap = null; //前一个地图
+	private static LMapConfig _currentMap;
 
-	public static void SetCurrentMap(Jyx2ConfigMap map)
+	public static void SetCurrentMap(LMapConfig map)
 	{
 		_currentMap = map;
 	}
@@ -91,7 +93,7 @@ public class LevelMaster : MonoBehaviour
 	/// 获取当前所在地图
 	/// </summary>
 	/// <returns></returns>
-	public static Jyx2ConfigMap GetCurrentGameMap()
+	public static LMapConfig GetCurrentGameMap()
 	{
 		return _currentMap;
 	}
@@ -104,10 +106,7 @@ public class LevelMaster : MonoBehaviour
 	/// <summary>
 	/// 当前是否在大地图，统一判断方式
 	/// </summary>
-	public bool IsInWorldMap
-	{
-		get { return _currentMap?.Tags.Contains("WORLDMAP") ?? false; }
-	}
+	public static bool IsInWorldMap => _currentMap != null && _currentMap.Tags.Contains("WORLDMAP");
 
 	public Image BlackCover
     {
@@ -220,6 +219,15 @@ public class LevelMaster : MonoBehaviour
 
 		IsInited = true;
 		
+		
+		//判断是否有进入触发的事件，如果有则触发
+		if (_currentMap != null && !_currentMap.BindScript.IsNullOrWhitespace())
+		{
+			if (!FindObjectOfType<LevelMasterBooster>().m_IsBattleMap)
+			{
+				FindObjectOfType<GameEventManager>().ExecuteJyx2Event(_currentMap.BindScript + ".Start");	
+			}
+		}
 	}
 
 	public void UpdateCameraParams()
@@ -238,14 +246,17 @@ public class LevelMaster : MonoBehaviour
 
 			var viewPortType = GameViewPortManager.Instance.GetViewportType();
 
+			var modConfig = RuntimeEnvSetup.CurrentModConfig;
+			
 			//高度
 			if (viewPortType == GameViewPortManager.ViewportType.Topdown)
 			{
-				body.m_FollowOffset = GlobalAssetConfig.Instance.defaultVcamOffset;	
+				
+				body.m_FollowOffset = modConfig.CameraOffsetFar != Vector3.zero ? modConfig.CameraOffsetFar : GlobalAssetConfig.Instance.defaultVcamOffset;	
 			}
 			else if(viewPortType == GameViewPortManager.ViewportType.TopdownClose)
 			{
-				body.m_FollowOffset = GlobalAssetConfig.Instance.vcamOffsetClose;
+				body.m_FollowOffset = modConfig.CameraOffsetNear != Vector3.zero ? modConfig.CameraOffsetNear : GlobalAssetConfig.Instance.vcamOffsetClose;
 			}
 
 
@@ -257,23 +268,20 @@ public class LevelMaster : MonoBehaviour
 		}
 	}
 
-	private void PlayMusic(Jyx2ConfigMap currentMap)
+	private void PlayMusic(LMapConfig currentMap)
 	{
 		if (currentMap == null) return;
 		
 		//有上一张图的出门音乐就放该音乐
 		if (LastGameMap != null)
 		{
-			if (LastGameMap.ForceSetLeaveMusicId != -1)
-			{
-				AudioManager.PlayMusic(LastGameMap.ForceSetLeaveMusicId);
-				return;
-			}
-			if (LastGameMap.OutMusic != -1)
-			{
-				AudioManager.PlayMusic(LastGameMap.OutMusic);
-				return;
-			}
+			var music = LastGameMap.GetOutMusic();
+                        if (music != -1)
+                        {
+                            AudioManager.PlayMusic(music);
+                            return;
+                        }
+
 		}
 		//没有就放进门的
 		AudioManager.PlayMusic(currentMap.InMusic);
@@ -344,9 +352,7 @@ public class LevelMaster : MonoBehaviour
 		}
 		else if (loadPara.loadType == LevelLoadPara.LevelLoadType.ReturnFromBattle)
 		{
-			//从战斗回来的，先不能触发对话逻辑
-			//GetPlayer().locomotionController.playerControllable = false; 作弊战斗回来后会卡住
-			GetPlayer().locomotionController.StopPlayerNavigation();
+			GetPlayer()?.StopPlayerMovement();
 
 			PlayerSpawnAt(loadPara.Pos);
 			PlayerSpawnRotate(loadPara.Rotate);
@@ -374,10 +380,10 @@ public class LevelMaster : MonoBehaviour
 		if (_gameMapPlayer == null)
 			return;
 
-		var animator = _gameMapPlayer.m_Animator;
-		if (animator != null)
+		var playerMovement = _gameMapPlayer.GetComponent<Jyx2_PlayerMovement>();
+		if (playerMovement != null)
 		{
-			animator.SetFloat("speed", Math.Min(speed, 20));
+			playerMovement.StopMovement();
 		}
 	}
 
@@ -512,7 +518,7 @@ public class LevelMaster : MonoBehaviour
 	{
 		if (runtime == null)
 		{
-			StoryEngine.Instance.DisplayPopInfo("<color=red>存档失败！</color>");
+			StoryEngine.DisplayPopInfo("<color=red>存档失败！</color>");
 			Debug.LogError("存档失败！请从GameStart中启动游戏！");
 			return;
 		}
@@ -528,7 +534,7 @@ public class LevelMaster : MonoBehaviour
 
 
 		runtime.GameSave(index);
-		StoryEngine.Instance.DisplayPopInfo("存档成功！");
+		StoryEngine.DisplayPopInfo("存档成功！");
 	}
 
 	public Vector3 GetPlayerPosition()
@@ -559,17 +565,17 @@ public class LevelMaster : MonoBehaviour
 		{
 			var evt = obj.GetComponent<GameEvent>();
 			if (evt == null) continue;
-			string eventId = obj.name;
+			string eventId = obj.name.Trim();
 
 			try
 			{
-				string modify = runtime.GetModifiedEvent(gameMap.Id, int.Parse(eventId));
+				string modify = runtime.GetModifiedEvent(gameMap.Id, eventId);
 				if (!string.IsNullOrEmpty(modify))
 				{
 					string[] tmp = modify.Split('_');
-					evt.m_InteractiveEventId = int.Parse(tmp[0]);
-					evt.m_UseItemEventId = int.Parse(tmp[1]);
-					evt.m_EnterEventId = int.Parse(tmp[2]);
+					evt.m_InteractiveEventId = tmp[0];
+					evt.m_UseItemEventId = tmp[1];
+					evt.m_EnterEventId = tmp[2];
 				}
 
 				evt.Init();
@@ -584,26 +590,14 @@ public class LevelMaster : MonoBehaviour
 	private void GamePadUpdate()
 	{
 		Button button = Jyx2InteractiveButton.GetInteractiveButton();
-
-		if (GamepadHelper.GamepadConnected != gamepadConnected)
-		{
-			gamepadConnected = GamepadHelper.GamepadConnected;
-
-			Transform trans = button?.gameObject.transform;
-			if (trans != null)
-			{
-				var image = trans.GetChild(2).GetComponentInChildren<Image>();
-				image.gameObject.SetActive(gamepadConnected);
-			}
-		}
-
-		if (gamepadConnected)
-		{
-			if (GamepadHelper.IsConfirm() && button != null && button.gameObject.activeSelf)
-			{
-				button.onClick?.Invoke();
-			}
-		}
-	}
+		if (button == null)
+			return;
+		if (!button.gameObject.activeInHierarchy)
+			return;
+        if (Jyx2_Input.GetButtonDown(Jyx2PlayerAction.Interact1))
+        {
+            button.onClick?.Invoke();
+        }
+    }
 }
 

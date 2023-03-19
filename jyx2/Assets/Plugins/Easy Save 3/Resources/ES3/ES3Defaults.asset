@@ -31,24 +31,26 @@ MonoBehaviour:
     assemblyNames:
     - Assembly-CSharp
     - UniTask
-    - UniRx
+    - UIWidgets
     - Assembly-CSharp-firstpass
     - UniTask.Linq
-    - Cinemachine
+    - UniRx
     - MTE_script
+    - Cinemachine
     - Animancer.Examples
-    - LeanCommon
-    - Animancer
     - LeanPool
+    - Animancer
     - UniTask.DOTween
-    - Purchasing.Common
-    - Sirenix.OdinInspector.CompatibilityLayer
-    - Auxiliary
     - Animancer.FSM
+    - LeanCommon
     - XNode
+    - SimpleFileBrowser.Runtime
     - UniRx.Examples
-    - UniTask.TextMeshPro
+    - Purchasing.Common
+    - Auxiliary
     - UniTask.Addressables
+    - Sirenix.OdinInspector.CompatibilityLayer
+    - UniTask.TextMeshPro
     - XNodeEditor
     - Sirenix.OdinInspector.CompatibilityLayer.Editor
     - UniTask.Editor

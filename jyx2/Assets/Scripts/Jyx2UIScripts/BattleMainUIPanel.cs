@@ -59,6 +59,14 @@ public partial class BattleMainUIPanel:Jyx2_UIBase
             ShowHUDSlider();
         }else
             ShowRole();
+        
+        
+        //只允许自动战斗
+        if (RuntimeEnvSetup.CurrentModConfig.AutoBattleOnly)
+        {
+            AutoBattle_Toggle.isOn = true;
+            AutoBattle_Toggle.enabled = false;
+        }
     }
 
     void ShowRole() 
@@ -89,7 +97,7 @@ public partial class BattleMainUIPanel:Jyx2_UIBase
         //---------------------------------------------------------------------------
         //---------------------------------------------------------------------------
 
-        PreImage_Image.LoadAsyncForget(m_currentRole.Data.GetPic());
+        PreImage_Image.LoadAsyncForget(m_currentRole.GetPic());
     }
 
     void OnAutoBattleValueChange(bool active) 
@@ -114,14 +122,12 @@ public partial class BattleMainUIPanel:Jyx2_UIBase
         }
     }
 
-	public override void Update()
-	{
-        //battle action ui handles update by itself, this is calling it twice
-
-        //BattleActionUIPanel panel = FindObjectOfType<BattleActionUIPanel>();
-        //if (panel != null)
-        //    panel.Update();
-	}
+    public void SwitchAutoBattle()
+    {
+        if (!AutoBattle_Toggle.gameObject.activeInHierarchy)
+            return;
+        AutoBattle_Toggle.isOn = !AutoBattle_Toggle.isOn;
+    }
 
 	void OnHUDCreate(Transform hudTrans) 
     {

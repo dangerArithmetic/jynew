@@ -15,7 +15,6 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using Jyx2.Middleware;
-using Jyx2Configs;
 using Random = UnityEngine.Random;
 
 namespace Jyx2
@@ -47,7 +46,7 @@ namespace Jyx2
             set;
         }
 
-        public Jyx2ConfigItem Anqi;
+        public LItemConfig Anqi;
 
         public string Key;
 
@@ -80,7 +79,7 @@ namespace Jyx2
                 //空挥升级
                 if ((Data.Level / 100) < ((Data.Level + levelAdd) / 100))
                 {
-                    StoryEngine.Instance.DisplayPopInfo(
+                    StoryEngine.DisplayPopInfo(
                         $"{role.Name}的{this.Data.Name}升到{((Data.Level + levelAdd) / 100) + 1}级!");
                 }
 
@@ -193,6 +192,12 @@ namespace Jyx2
         public virtual SkillCoverType GetCoverType()
         {
             return Data.CoverType;
+        }
+
+        //用来提高Lua侧获取CoverType的速度
+        public virtual int GetCoverTypeInt()
+        {
+            return (int)Data.CoverType;
         }
 
         public virtual int GetCoverSize()
@@ -328,7 +333,7 @@ namespace Jyx2
     {
         private const int ANQI_MAGIC_ID = 97;
 
-        public AnqiSkillCastInstance(int lv, Jyx2ConfigItem item)
+        public AnqiSkillCastInstance(int lv, LItemConfig item)
         {
             //Key = "暗器_" + item.Name;
             Key = "暗器";

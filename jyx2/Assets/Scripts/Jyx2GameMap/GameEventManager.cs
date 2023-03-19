@@ -102,7 +102,7 @@ public class GameEventManager : MonoBehaviour
     {
         if (!curEvent.IsUseItemEvent) return;
 
-        await Jyx2_UIManager.Instance.ShowUIAsync(nameof(BagUIPanel), GameRuntimeData.Instance.Items, new Action<int>((itemId) =>
+        await Jyx2_UIManager.Instance.ShowUIAsync(nameof(BagUIPanel), new Action<int>((itemId) =>
         {
             if (itemId == -1) //取消使用
                 return;
@@ -136,24 +136,32 @@ public class GameEventManager : MonoBehaviour
 
 
 
-    public void ExecuteJyx2Event(int eventId, JYX2EventContext context = null)
+    public void ExecuteJyx2Event(string eventName, JYX2EventContext context = null)
     {
-        if (eventId < 0)
+        int eventId = -1;
+        if (int.TryParse(eventName, out var v))
         {
-            //Debug.LogError("执行错误的luaEvent，id=" + eventId);
+            eventId = v;
+            if (eventId < 0)
+            {
+                //Debug.LogError("执行错误的luaEvent，id=" + eventId);
+                return;
+            }
+        }
+        
+
+        if (GetCurrentGameEvent() != null)
+        {
+            Debug.LogError("错误：在一个事件执行完毕以前不能执行新的事件。");
             return;
         }
 
-        //停止导航
-        var levelMaster = LevelMaster.Instance;
-
         //fix player stop moving after interaction UI confirm
-        if (levelMaster != null && eventId != 911)
+        if (eventId != 911)
         {
             // fix drag motion continuous move the player when scene is playing
             // modified by eaphone at 2021/05/31
-            levelMaster.GetPlayer().locomotionController.playerControllable = false;
-            levelMaster.GetPlayer().locomotionController.StopPlayerNavigation();
+            Jyx2Player.GetPlayer()?.StopPlayerMovement();
         }
         
         SetCurrentGameEvent(curEvent);
@@ -165,14 +173,14 @@ public class GameEventManager : MonoBehaviour
         {
             //先判断是否有蓝图类
             //如果有则执行蓝图，否则执行lua
-            var graph = await Jyx2ResourceHelper.LoadEventGraph(eventId);
+            var graph = await Jyx2ResourceHelper.LoadEventGraph(eventName);
             if (graph != null)
             {
                 graph.Run(OnFinishEvent);
             }
             else
             {
-                var eventLuaPath = string.Format(RuntimeEnvSetup.CurrentModConfig.LuaFilePatten, eventId);
+                var eventLuaPath = string.Format(RuntimeEnvSetup.CurrentModConfig.LuaFilePatten, eventName);
                 await Jyx2.LuaExecutor.Execute(eventLuaPath);
                 OnFinishEvent();
             }
@@ -186,13 +194,6 @@ public class GameEventManager : MonoBehaviour
         JYX2EventContext.current = null;
 
         SetCurrentGameEvent(null);
-        // fix drag motion continuous move the player when scene is playing
-        // modified by eaphone at 2021/05/31
-        var levelMaster = LevelMaster.Instance;
-        if (levelMaster != null)
-        {
-            levelMaster.GetPlayer().locomotionController.playerControllable = true;
-        }
 
         if (curEvent != null)
         {
@@ -203,7 +204,7 @@ public class GameEventManager : MonoBehaviour
     }
 
     static string _currentEvt;
-    public static void SetCurrentGameEvent(GameEvent evt)
+    public void SetCurrentGameEvent(GameEvent evt)
     {
         if (evt == null)
         {

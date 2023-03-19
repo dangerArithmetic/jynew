@@ -10,18 +10,12 @@
 using UnityEngine;
 using Jyx2;
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using i18n.TranslatorDef;
 using Jyx2.Middleware;
-using UnityEngine.UI;
-
-using Jyx2Configs;
-using System.Threading;
-using System.Threading.Tasks;
-using System.Linq;
 using Cysharp.Threading.Tasks;
 using Jyx2.ResourceManagement;
+using MOD.UI;
 
 public partial class GameMainMenu : Jyx2_UIBase
 {
@@ -36,233 +30,67 @@ public partial class GameMainMenu : Jyx2_UIBase
 
 	private PanelType m_panelType;
 
-	private int main_menu_index => current_selection;
-
-	private const int NewGameIndex = 0;
-	private const int LoadGameIndex = 1;
-	private const int SettingsIndex = 2;
-	private const int QuitGameIndex = 3;
-
-	private string m_newName;
-
 	async void OnStart()
 	{
-		MainMenuTitles.SetActive(false);
-		//显示loading
-		var c = StartCoroutine(ShowLoading());
-		StopCoroutine(c);
 		await RuntimeEnvSetup.Setup();
-		
-		LoadingText.gameObject.SetActive(false);
-		homeBtnAndTxtPanel_RectTransform.gameObject.SetActive(true);
-
-		var res = await ResLoader.LoadAsset<GameObject>("MainMenuBg.prefab");
-		if (res != null)
-		{
-			var newMainMenuBg = Instantiate(res, this.transform, false);
-			newMainMenuBg.transform.SetAsFirstSibling();
-		}
-		else
-		{
-			MainMenuTitles.gameObject.SetActive(true);
-		}
-
-		JudgeShowReleaseNotePanel();
-	}
-
-	private void OnEnable()
-	{
-		transform.Find("mainPanel/ExtendPanel")?.gameObject.SetActive(true); 
-	}
-
-	void JudgeShowReleaseNotePanel()
-	{
-		//每个更新显示一次 这里就不用Jyx2_PlayerPrefs了
-		string key = "RELEASENOTE_" + Application.version;
-		if (!PlayerPrefs.HasKey(key))
-		{
-			ReleaseNote_Panel.gameObject.SetActive(true);
-			PlayerPrefs.SetInt(key, 1);
-			PlayerPrefs.Save();
-		}
-	}
-
-	IEnumerator ShowLoading()
-	{
-		while (true)
-		{
-			LoadingText.gameObject.SetActive(!LoadingText.gameObject.activeSelf);
-			yield return new WaitForSeconds(0.5f);
-		}
-	}
+		LoadMainMenuBackGround().Forget();
+    }
 
 
-	public override UILayer Layer { get => UILayer.MainUI; }
-	protected override void OnCreate()
+	public override UILayer Layer => UILayer.MainUI;
+
+	public bool IsNameInputFocused => NameInput_InputField.isFocused;
+
+    protected override void OnCreate()
 	{
 		InitTrans();
 		RegisterEvent();
 		m_randomProperty = this.StartNewRolePanel_RectTransform.GetComponent<RandomPropertyComponent>();
 	}
 
-
-
-	protected override Color normalButtonColor()
+    private async UniTask LoadMainMenuBackGround()
 	{
-		return ColorStringDefine.main_menu_normal;
-	}
+        DefaultBackGround_RectTransform.gameObject.BetterSetActive(false);
+        homeBtnAndTxtPanel_RectTransform.gameObject.BetterSetActive(false);
 
-	protected override Color selectedButtonColor()
-	{
-		return ColorStringDefine.main_menu_selected;
-	}
-
-	protected override bool captureGamepadAxis
-	{
-		get { return true; }
-	}
-
-
-	protected override void handleGamepadButtons()
-	{
-		if (m_panelType != PanelType.NewGamePage
-			&& m_panelType != PanelType.LoadGamePage
-			&& m_panelType != PanelType.PropertyPage
-			&& !ReleaseNote_Panel.gameObject.activeSelf)
-			base.handleGamepadButtons();
-		else
-		{
-			if (gameObject.activeSelf)
-				if (GamepadHelper.IsConfirm())
-				{
-					if (m_panelType == PanelType.NewGamePage)
-					{
-						OnCreateBtnClicked();
-					}
-					else if (m_panelType == PanelType.PropertyPage)
-					{
-						OnCreateRoleYesClick();
-					}
-				}
-				else if (GamepadHelper.IsCancel())
-				{
-					if (m_panelType == PanelType.NewGamePage
-						|| m_panelType == PanelType.LoadGamePage) //save/ load panel has its own logic to close/ hide themself
-					{
-						OnBackBtnClicked();
-					}
-					else if (m_panelType == PanelType.PropertyPage)
-					{
-						OnCreateRoleNoClick();
-					}
-					else if (ReleaseNote_Panel.gameObject.activeSelf)
-					{
-						ReleaseNote_Panel.gameObject.SetActive(false);
-					}
-				}
+		//当MainMenuBg预制体的实例存在于节点下，则不再创建新的实例
+        Transform mainMenuBgTrans = transform.Find("MainMenuBg(Clone)");
+        if (mainMenuBgTrans == null)
+        {
+			var res = await ResLoader.LoadAsset<GameObject>("MainMenuBg.prefab");
+			if (res != null)
+			{
+				var newMainMenuBg = Instantiate(res, transform, false);
+				newMainMenuBg.transform.SetAsFirstSibling();
+			}
+			else
+			{
+				DefaultBackGround_RectTransform.gameObject.BetterSetActive(true);
+			}
 		}
-	}
+        else
+        {
+			mainMenuBgTrans.gameObject.BetterSetActive(true);
+        }
 
+        
+        homeBtnAndTxtPanel_RectTransform.gameObject.BetterSetActive(true);
+        ReleaseNotePanel.ShowReleaseNoteIfPossible(ReleaseNoteType.Mod);
+    }
 
 
 	protected override void OnShowPanel(params object[] allParams)
 	{
 		base.OnShowPanel(allParams);
 		OnStart();
-		AudioManager.PlayMusic(16);
+		AudioManager.PlayMusic(GameConst.GAME_START_MUSIC_ID);
 		m_panelType = PanelType.Home;
-		GlobalHotkeyManager.Instance.RegistHotkey(this, KeyCode.DownArrow, () =>
-		{
-			OnDirectionalDown();
-		});
-
-		GlobalHotkeyManager.Instance.RegistHotkey(this, KeyCode.UpArrow, () =>
-		{
-			OnDirectionalUp();
-		});
-		GlobalHotkeyManager.Instance.RegistHotkey(this, KeyCode.Space, () =>
-		{
-			onButtonClick();
-		});
-		GlobalHotkeyManager.Instance.RegistHotkey(this, KeyCode.Escape, () =>
-		{
-			if (m_panelType == PanelType.NewGamePage || m_panelType == PanelType.LoadGamePage)//save/ load panel has its own logic to close/ hide themself
-			{
-				OnBackBtnClicked();
-			}
-		});
-		GlobalHotkeyManager.Instance.RegistHotkey(this, KeyCode.Return, () =>
-		{
-			if (m_panelType == PanelType.NewGamePage)
-			{
-				onButtonClick(); //OnCreateBtnClicked();
-			}
-		});
-		GlobalHotkeyManager.Instance.RegistHotkey(this, KeyCode.Y, () =>
-		{
-			if (m_panelType == PanelType.PropertyPage)
-			{
-				OnCreateRoleYesClick();
-			}
-		});
-		GlobalHotkeyManager.Instance.RegistHotkey(this, KeyCode.N, () =>
-		{
-			if (m_panelType == PanelType.PropertyPage)
-			{
-				OnCreateRoleNoClick();
-			}
-		});
 	}
 
-	private void toggleButtonOutline(Button button, bool on)
-	{
-		var outline = button?.gameObject.GetComponentInChildren<Outline>();
-		if (outline != null)
-			outline.enabled = on;
-	}
-
-	int current_selection_x = 3;
-
-	private void selectBottomButton(int index)
-	{
-		current_selection_x = index;
-		isXSelection = index > -1;
-
-		for (var i = 0; i < bottomButtons.Count; i++)
-		{
-			var button = bottomButtons[i];
-			toggleButtonOutline(button, i == current_selection_x);
-		}
-
-		if (index > -1)
-			changeCurrentSelection(-1);
-	}
-
-	private void onButtonClick()
-	{
-		if (m_panelType == PanelType.Home)
-		{
-			if (main_menu_index == NewGameIndex)
-			{
-				OnNewGameClicked();
-			}
-			else if (main_menu_index == LoadGameIndex)
-			{
-				OnLoadGameClicked();
-			}else if (main_menu_index == SettingsIndex)
-			{
-				OpenSettingsPanel();
-			}
-			else if (main_menu_index == QuitGameIndex)
-			{
-				OnQuitGameClicked();
-			}
-		}
-	}
 
 	public void OnNewGameClicked()
 	{
-		transform.Find("mainPanel/ExtendPanel")?.gameObject.SetActive(false); 
+		 
 		OnNewGame();
 	}
 
@@ -271,25 +99,18 @@ public partial class GameMainMenu : Jyx2_UIBase
 	public async void OnLoadGameClicked()
 	{
 		m_panelType = PanelType.LoadGamePage;
-		//---------------------------------------------------------------------------
-		//await Jyx2_UIManager.Instance.ShowUIAsync(nameof(SavePanel), new Action<int>((index) =>
-		//{
-		//    if (!StoryEngine.DoLoadGame(index) && m_panelType==PanelType.LoadGamePage){
-		//        OnNewGame();
-		//    }
-		//}),"选择读档位", new Action(() =>
-		//{
-		//    m_panelType = PanelType.Home;
-		//}));
-		//---------------------------------------------------------------------------
-		//特定位置的翻译【读档时候的Title显示】
-		//---------------------------------------------------------------------------
 		await Jyx2_UIManager.Instance.ShowUIAsync(nameof(SavePanel), new Action<int>((archiveIndex) =>
 		{
 			var summary = GameSaveSummary.Load(archiveIndex);
-			if (summary.ModId != null && !summary.ModId.ToLower().Equals(RuntimeEnvSetup.CurrentModId.ToLower()))
+            if (summary.IsEmpty())
+            {
+                StoryEngine.DisplayPopInfo("存档为空");
+                return;
+            }
+            var modId = summary.ModId.ToLower();
+			if (!modId.Equals(RuntimeEnvSetup.CurrentModId.ToLower()))
 			{
-				List<string> selectionContent = new List<string>() {"是(Y)", "否(N)"};
+				List<string> selectionContent = new List<string>() {"是", "否"};
 				string msg = "该存档MOD不匹配，载入可能导致数据错乱，是否继续？";
 				Jyx2_UIManager.Instance.ShowUIAsync(nameof(ChatUIPanel), ChatType.Selection, "0", msg, selectionContent, new Action<int>((selection) =>
 				{
@@ -316,37 +137,28 @@ public partial class GameMainMenu : Jyx2_UIBase
 
 	public void OnQuitGameClicked()
 	{
-#if UNITY_EDITOR
-		UnityEditor.EditorApplication.isPlaying = false;
-#else
-		Application.Quit();
-#endif
+		ModPanelNew.SwitchSceneTo();
 	}
 
-	private void setPlayerName()
+	private void SetPlayerName(string newName)
 	{
-		//todo:去掉特殊符号
-		if (string.IsNullOrWhiteSpace(m_newName))
+		if (string.IsNullOrWhiteSpace(newName) || string.IsNullOrEmpty(newName))
 			return;
 
 		m_panelType = PanelType.PropertyPage;
 		//todo:给玩家提示
 		RoleInstance role = GameRuntimeData.Instance.Player;
-		role.Name = m_newName;
+		role.Name = newName;
 		m_randomProperty.ShowComponent();
 		DoGeneratePlayerRole();
 	}
 
 	public void OnCreateBtnClicked()
 	{
-		if (m_newName == null)
-		{
-			m_newName = this.NameInput_InputField.text;
-		}
-		setPlayerName();
+		SetPlayerName(NameInput_InputField.text);
 		
-		this.InputNamePanel_RectTransform.gameObject.SetActive(false);
-		this.StartNewRolePanel_RectTransform.gameObject.SetActive(true);
+		InputNamePanel_RectTransform.gameObject.SetActive(false);
+		StartNewRolePanel_RectTransform.gameObject.SetActive(true);
 		// generate random property at randomP panel first show
 		// added by eaphone at 2021/05/23
 		OnCreateRoleNoClick();
@@ -357,18 +169,17 @@ public partial class GameMainMenu : Jyx2_UIBase
 		GameRuntimeData.CreateNew();
 
 		m_panelType = PanelType.NewGamePage;
-		this.homeBtnAndTxtPanel_RectTransform.gameObject.SetActive(false);
+		homeBtnAndTxtPanel_RectTransform.gameObject.SetActive(false);
 
 		Debug.Log(RuntimeEnvSetup.CurrentModConfig.PlayerName);
 		if (!string.IsNullOrEmpty(RuntimeEnvSetup.CurrentModConfig.PlayerName))
 		{
-			m_newName = RuntimeEnvSetup.CurrentModConfig.PlayerName;
-			setPlayerName();
-			this.StartNewRolePanel_RectTransform.gameObject.SetActive(true);
+			SetPlayerName(RuntimeEnvSetup.CurrentModConfig.PlayerName);
+			StartNewRolePanel_RectTransform.gameObject.SetActive(true);
 		}
 		else
 		{
-			this.InputNamePanel_RectTransform.gameObject.SetActive(true);
+			InputNamePanel_RectTransform.gameObject.SetActive(true);
 			NameInput_InputField.ActivateInputField();
 		}
 	}
@@ -377,15 +188,15 @@ public partial class GameMainMenu : Jyx2_UIBase
 	{
 		BindListener(this.NewGameButton_Button, OnNewGameClicked);
 		BindListener(this.LoadGameButton_Button, OnLoadGameClicked);
-		BindListener(this.SettingsButton_Button, OpenSettingsPanel);
+		BindListener(this.GameSettingsButton_Button, OpenSettingsPanel);
 		BindListener(this.QuitGameButton_Button, OnQuitGameClicked);
 		
-		BindListener(this.inputSure_Button, OnCreateBtnClicked, false);
-		BindListener(this.inputBack_Button, OnBackBtnClicked, false);
-		BindListener(this.YesBtn_Button, OnCreateRoleYesClick, false);
-		BindListener(this.NoBtn_Button, OnCreateRoleNoClick, false);
+		BindListener(this.inputSure_Button, OnCreateBtnClicked);
+		BindListener(this.inputBack_Button, OnBackBtnClicked);
+		BindListener(this.YesBtn_Button, OnCreateRoleYesClick);
+		BindListener(this.NoBtn_Button, OnCreateRoleNoClick);
 	}
-	private void OnCreateRoleYesClick()
+	public void OnCreateRoleYesClick()
 	{
 		//reset mode, fix bug or quit game and new game again on main menu goes straight to property panel
 		m_panelType = PanelType.Home;
@@ -396,13 +207,19 @@ public partial class GameMainMenu : Jyx2_UIBase
 		loadPara.triggerName = "0";
 		GameRuntimeData.Instance.startDate = DateTime.Now;
 		//加载地图
-		var startMap = Jyx2ConfigMap.GetGameStartMap();
+		var startMap = LuaToCsBridge.MapTable[0].GetGameStartMap();
+		if (startMap == null)
+		{
+			Debug.LogError("没有定义开始地图，需要在场景.xls中指定一个地图标签为START！");
+			return;
+		}
 
 		string startTrigger = startMap.GetTagValue("START");
 		if (!string.IsNullOrEmpty(startTrigger))
 		{
 			loadPara.triggerName = startTrigger;
 		}
+		
 		
 		LevelLoader.LoadGameMap(startMap, loadPara, () =>
 		{
@@ -414,7 +231,7 @@ public partial class GameMainMenu : Jyx2_UIBase
 			player.OnSceneLoad().Forget();
 		});
 	}
-	private void OnCreateRoleNoClick()
+	public void OnCreateRoleNoClick()
 	{
 		DoGeneratePlayerRole();
 	}
@@ -462,7 +279,10 @@ public partial class GameMainMenu : Jyx2_UIBase
 			int value = 0;
 			if (cheating) //秘籍
 			{
-				value = item.DefaulMax;
+				if (i == 0) //作弊状况下内力性质永远中性调和
+					value = (int)Jyx2_MpType.Neutral;
+				else
+					value = item.DefaulMax;
 			}
 			else
 			{
@@ -473,27 +293,20 @@ public partial class GameMainMenu : Jyx2_UIBase
 	}
 	
 
-	private void OnBackBtnClicked()
+	public void OnBackBtnClicked()
 	{
 		this.homeBtnAndTxtPanel_RectTransform.gameObject.SetActive(true);
 		this.InputNamePanel_RectTransform.gameObject.SetActive(false);
 		m_panelType = PanelType.Home;
 		
-		transform.Find("mainPanel/ExtendPanel")?.gameObject.SetActive(true);
+		
 	}
 
-	protected override void OnHidePanel()
+    public void OnReleaseNoteBtnClick()
 	{
-		base.OnHidePanel();
-		//释放资源
-		GlobalHotkeyManager.Instance.UnRegistHotkey(this, KeyCode.DownArrow);
-		GlobalHotkeyManager.Instance.UnRegistHotkey(this, KeyCode.UpArrow);
-		GlobalHotkeyManager.Instance.UnRegistHotkey(this, KeyCode.Space);
-		//GlobalHotkeyManager.Instance.UnRegistHotkey(this, KeyCode.Escape);
-		GlobalHotkeyManager.Instance.UnRegistHotkey(this, KeyCode.Return);
-		GlobalHotkeyManager.Instance.UnRegistHotkey(this, KeyCode.Y);
-		GlobalHotkeyManager.Instance.UnRegistHotkey(this, KeyCode.N);
+		ReleaseNotePanel.ShowReleaseNoteAnyway(ReleaseNoteType.Mod);
 	}
+    
 
 	public void OnOpenURL(string url)
 	{
@@ -513,41 +326,6 @@ public partial class GameMainMenu : Jyx2_UIBase
 	/// </summary>
 	public void OpenModPanel()
 	{
-		Jyx2_UIManager.Instance.ShowUIAsync(nameof(ModPanelNew)).Forget();
+		ModPanelNew.SwitchSceneTo();
 	}
-	
-	bool isXSelection = false;
-
-	protected override void OnDirectionalLeft()
-	{
-		var nextSelectionX = (current_selection_x <= 0) ? bottomButtons.Count - 1 : current_selection_x - 1;
-
-		selectBottomButton(nextSelectionX);
-	}
-
-	protected override void OnDirectionalRight()
-	{
-		var nextSelectionX = (current_selection_x >= bottomButtons.Count - 1) ? 0 : current_selection_x + 1;
-
-		selectBottomButton(nextSelectionX);
-	}
-
-	protected override void changeCurrentSelection(int num)
-	{
-		base.changeCurrentSelection(num);
-
-		if (num > -1)
-			selectBottomButton(-1);
-	}
-
-	protected override void buttonClickAt(int position)
-	{
-		if (!isXSelection)
-			base.buttonClickAt(position);
-		else
-		{
-			bottomButtons[current_selection_x]?.onClick?.Invoke();
-		}
-	}
-
 }

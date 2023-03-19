@@ -17,13 +17,12 @@ using UniRx;
 using UnityEngine;
 using UnityEngine.UI;
 using DG.Tweening;
-using Jyx2Configs;
 
 /// <summary>
 /// JYX工具类
 /// </summary>
 
-public class GameUtil
+public static class GameUtil
 {
     /// <summary>
     /// 选择角色
@@ -39,8 +38,8 @@ public class GameUtil
             selectionContent.Add(role.Name);
         }
         selectionContent.Add("取消");
-        var storyEngine = StoryEngine.Instance;
-        storyEngine.BlockPlayerControl = true;
+        //var storyEngine = StoryEngine.Instance;
+        StoryEngine.BlockPlayerControl = true;
         
         SelectRoleParams selectParams = new SelectRoleParams();
         selectParams.roleList = roles.ToList();
@@ -48,7 +47,7 @@ public class GameUtil
         selectParams.isDefaultSelect=false;
         selectParams.callback = (cbParam) => 
         {
-            storyEngine.BlockPlayerControl = false;
+            StoryEngine.BlockPlayerControl = false;
             if (cbParam.isCancelClick == true)
             {
                 return;
@@ -72,7 +71,7 @@ public class GameUtil
     /// <param name="duration"></param>
     public static void DisplayPopinfo(string msg, float duration =2f)
     {
-        StoryEngine.Instance.DisplayPopInfo(msg, duration);
+        StoryEngine.DisplayPopInfo(msg, duration);
     }
 
     public static async void ShowFullSuggest(string content, string title = "", Action cb = null) 
@@ -87,6 +86,14 @@ public class GameUtil
         else
             Time.timeScale = 1;
     }
+
+    public static void BetterSetActive(this GameObject go, bool isActive)
+    {
+        if (go == null || go.activeSelf == isActive)
+            return;
+        go.SetActive(isActive);
+    }
+
 
     public static Component GetOrAddComponent(Transform trans,string type)
     {
@@ -109,7 +116,7 @@ public class GameUtil
         return com;
     }
     
-    public static T GetOrAddComponent<T>(GameObject go) where T:Component
+    public static T GetOrAddComponent<T>(this GameObject go) where T:Component
     {
         return GetOrAddComponent<T>(go.transform);
     }
@@ -120,7 +127,7 @@ public class GameUtil
     }
     
     
-    public static void CallWithDelay(double time,Action action)
+    public static void CallWithDelay(double time,Action action, Component attachedComponent = null)
     {
         if(time == 0)
         {
@@ -128,10 +135,14 @@ public class GameUtil
             return;
         }
 
-        Observable.Timer(TimeSpan.FromSeconds(time)).Subscribe(ms =>
+        var observable = Observable.Timer(TimeSpan.FromSeconds(time)).Subscribe(ms =>
         {
             action();
         });
+
+        //避免关联对象销毁后延时逻辑仍然访问该对象的问题
+        if (attachedComponent != null)
+            observable.AddTo(attachedComponent);
     }
 
     public static async UniTask ShowYesOrNoCastrate(RoleInstance role, Action action)
@@ -139,7 +150,7 @@ public class GameUtil
         if (role.Sex == 0)//男
         {
             string msg = "修炼此书必须先行挥剑自宫，你是否仍要修炼？";
-            List<string> selectionContent = new List<string>() { "是(Y)", "否(N)" };
+            List<string> selectionContent = new List<string>() { "是", "否" };
             await Jyx2_UIManager.Instance.ShowUIAsync(nameof(ChatUIPanel), ChatType.Selection, "0", msg, selectionContent, new Action<int>((index) =>
             {
                 if (index == 0)
@@ -183,12 +194,12 @@ public class GameUtil
         });
     }
 
-    public static async UniTask ShowYesOrNoUseItem(Jyx2ConfigItem item, Action action)
+    public static async UniTask ShowYesOrNoUseItem(LItemConfig item, Action action)
     {
         if (GameRuntimeData.Instance.GetItemUser(item.Id) != -1)
         {
             string msg = (int)item.ItemType == 1 ? "此物品已经有人配备，是否换人配备？" : "此物品已经有人修炼，是否换人修炼？";
-            List<string> selectionContent = new List<string>() { "是(Y)", "否(N)" };
+            List<string> selectionContent = new List<string>() { "是", "否" };
             await Jyx2_UIManager.Instance.ShowUIAsync(nameof(ChatUIPanel), ChatType.Selection, "0", msg, selectionContent, new Action<int>((index) =>
             {
                 if (index == 0)

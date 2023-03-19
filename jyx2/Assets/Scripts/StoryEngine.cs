@@ -16,7 +16,6 @@ using Jyx2;
 using System;
 using System.Globalization;
 using Cysharp.Threading.Tasks;
-using Jyx2Configs;
 using UnityEngine.Playables;
 
 //待重构
@@ -24,18 +23,17 @@ public class StoryEngine : MonoBehaviour
 {
     public static StoryEngine Instance;
 
-
     public bl_HUDText HUDRoot;
     
 
-    public bool BlockPlayerControl
+    public static bool BlockPlayerControl
     {
         get { return _blockPlayerControl; }
         set { _blockPlayerControl = value; }
     }
 
 
-    private bool _blockPlayerControl;
+    private static bool _blockPlayerControl;
 
     private static GameRuntimeData runtime
     {
@@ -47,7 +45,7 @@ public class StoryEngine : MonoBehaviour
         Instance = this;
     }
 
-    public async void DisplayPopInfo(string msg, float duration = 2f)
+    public static async void DisplayPopInfo(string msg, float duration = 2f)
     {
         await Jyx2_UIManager.Instance.ShowUIAsync(nameof(CommonTipsUIPanel), TipsType.Common, msg, duration);
     }
@@ -86,7 +84,7 @@ public class StoryEngine : MonoBehaviour
                 loadPara.Rotate = r.SubMapData.CurrentOri;
             }
 
-            var map = GameConfigDatabase.Instance.Get<Jyx2ConfigMap>(mapId);
+            var map = LuaToCsBridge.MapTable[mapId];
 
             if (map == null)
             {
@@ -94,13 +92,14 @@ public class StoryEngine : MonoBehaviour
             }
             LevelMaster.LastGameMap = null;
             LevelLoader.LoadGameMap(map, loadPara,
-                () => { LevelMaster.Instance.TryBindPlayer().Forget(); });
+                () => { LuaExecutor.Clear(); 
+                        LevelMaster.Instance.TryBindPlayer().Forget(); });
             return true;
         }
-        catch (Exception e)
+        catch (Exception ex)
         {
             MessageBox.ShowMessage("错误，载入存档失败。请检查版本号和MOD是否匹配。");
-            Debug.LogError("存档异常" + e.Message);
+            Debug.LogErrorFormat("存档异常:{0}" , ex);
             return true;
         }
     }

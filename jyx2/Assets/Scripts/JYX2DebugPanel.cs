@@ -14,39 +14,44 @@ using Jyx2;
 
 using System.Collections;
 using System.Collections.Generic;
-using Jyx2Configs;
 using UnityEngine;
 using UnityEngine.UI;
+using Jyx2.InputCore;
 
-public class JYX2DebugPanel : MonoBehaviour
+public class JYX2DebugPanel : MonoBehaviour,IJyx2_InputContext
 {
     public Dropdown m_ChangeScene;
     public Dropdown m_TransportDropdown;
 
-    List<Jyx2ConfigMap> m_ChangeSceneMaps = new List<Jyx2ConfigMap>();
-    bool _debugPanelSwitchOff = false;
+    List<LMapConfig> m_ChangeSceneMaps = new List<LMapConfig>();
+    bool _isDebugPanelOn = false;
 
-    public bool IsDebugPanelSwitchOff()
+    public bool CanUpdate => _isDebugPanelOn;
+
+    void OnDestroy()
     {
-        return _debugPanelSwitchOff;
+        //销毁时注销难度监听
+        GameSettingManager.OnDifficultyChange -= OnDifficultyChange;
+    }
+
+    void OnDisable()
+    {
+        InputContextManager.Instance.RemoveInputContext(this);
     }
 
     //打开和关闭面板
     public void DebugPanelSwitch()
     {
-        transform.DOLocalMoveX(_debugPanelSwitchOff ? -1360f : -960f, 0.3f);
-        
-        LevelMaster lm = LevelMaster.Instance;
-        if (lm != null)
+        transform.DOLocalMoveX(_isDebugPanelOn ? -1360f : -960f, 0.3f);
+        _isDebugPanelOn = !_isDebugPanelOn;
+        if(_isDebugPanelOn)
         {
-            var player = lm.GetPlayer();
-            if (player != null)
-            {
-                player.locomotionController.forceDisable = !_debugPanelSwitchOff;
-            }
+            InputContextManager.Instance.AddInputContext(this);
         }
-
-        _debugPanelSwitchOff = !_debugPanelSwitchOff;
+        else
+        {
+            InputContextManager.Instance.RemoveInputContext(this);
+        }
     }
 
     #region 地点跳转
@@ -56,7 +61,7 @@ public class JYX2DebugPanel : MonoBehaviour
         m_ChangeScene.ClearOptions();
         List<string> activeMaps = new List<string>();
         activeMaps.Add("选择场景");
-        foreach (var map in GameConfigDatabase.Instance.GetAll<Jyx2ConfigMap>())
+        foreach (var map in LuaToCsBridge.MapTable.Values)
         {
             if (map.Tags.Contains("BATTLE")) continue;
             activeMaps.Add(map.GetShowName());
@@ -93,18 +98,18 @@ public class JYX2DebugPanel : MonoBehaviour
         if (!curMap.Tags.Contains("WORLDMAP"))
         {
             string msg = "<color=red>警告：不在大地图上执行传送可能会导致某些剧情中断，强烈建议您退到大地图再执行。是否强行执行？</color>";
-            List<string> selectionContent = new List<string>() { "是(Y)", "否(N)" };
+            List<string> selectionContent = new List<string>() { "是", "否" };
             await Jyx2_UIManager.Instance.ShowUIAsync(nameof(ChatUIPanel), ChatType.Selection, "0", msg, selectionContent, new Action<int>((index) =>
             {
                 if (index == 0)
                 {
-                    LevelLoader.LoadGameMap(GameConfigDatabase.Instance.Get<Jyx2ConfigMap>(id));
+                    LevelLoader.LoadGameMap(LuaToCsBridge.MapTable[id]);
                 }
             }));
         }
         else
         {
-            LevelLoader.LoadGameMap(GameConfigDatabase.Instance.Get<Jyx2ConfigMap>(id));
+            LevelLoader.LoadGameMap(LuaToCsBridge.MapTable[id]);
         }
     }
 
@@ -117,7 +122,7 @@ public class JYX2DebugPanel : MonoBehaviour
         if (!curMap.Tags.Contains("WORLDMAP"))
         {
             string msg = "<color=red>警告：不在大地图上执行传送可能会导致某些剧情中断，强烈建议您退到大地图再执行。是否强行执行？</color>";
-            List<string> selectionContent = new List<string>() { "是(Y)", "否(N)" };
+            List<string> selectionContent = new List<string>() { "是", "否" };
             await Jyx2_UIManager.Instance.ShowUIAsync(nameof(ChatUIPanel), ChatType.Selection, "0", msg, selectionContent, new Action<int>((index) =>
             {
                 if (index == 0)
@@ -133,17 +138,54 @@ public class JYX2DebugPanel : MonoBehaviour
     }
     #endregion
 
+    private void Awake()
+    {
+        //挂载时启动难度监听
+        GameSettingManager.OnDifficultyChange += OnDifficultyChange;
+    }
+
     private void Start()
     {
         InitLocationDebugTools();
-
+        //根据设置调整可用性
+        RefreshValidity();
     }
 
-    private void Update()
+    public void OnUpdate()
     {
-        if (Input.GetKeyUp(KeyCode.BackQuote))
+        if(Input.GetKeyUp(KeyCode.BackQuote)) 
         {
             DebugPanelSwitch();
         }
     }
+
+    void RefreshValidity()
+    {
+        //如果mod不允许开控制台，则直接关闭
+        var modConfig = RuntimeEnvSetup.CurrentModConfig;
+        if (modConfig != null && !modConfig.IsConsoleEnable)
+        {
+            this.gameObject.SetActive(false);
+            return;
+        }
+
+        var newDifficulty = GameSettingManager.GetDifficulty();
+        foreach (var dif in modConfig.ConsoleDisableDifficulty)
+        {
+            //判断难度是否为需要禁止控制台的难度
+            if (newDifficulty == (int) dif)
+            {
+                this.gameObject.SetActive(false);
+                Debug.Log($"难度{dif}下关闭控制台");
+                return;
+            }
+        }
+        this.gameObject.SetActive(true);
+    }
+
+    private void OnDifficultyChange(Jyx2_GameDifficulty newDifficulty)
+    {
+        RefreshValidity();
+    }
+
 }

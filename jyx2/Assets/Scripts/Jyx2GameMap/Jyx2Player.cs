@@ -8,18 +8,17 @@
  * 金庸老先生千古！
  */
 using Jyx2;
-using System.Collections;
-using System.Collections.Generic;
-using System.Net;
 using Animancer;
 using Cysharp.Threading.Tasks;
-using NUnit.Framework;
-using UnityEditor;
 using UnityEngine;
 using UnityEngine.AI;
-using UnityEngine.Serialization;
-using XLua;
+using Jyx2.InputCore;
 
+
+[RequireComponent(typeof(Jyx2_PlayerInput))]
+[RequireComponent(typeof(Jyx2_PlayerMovement))]
+[RequireComponent(typeof(Jyx2_PlayerAutoWalk))]
+[DisallowMultipleComponent]
 public class Jyx2Player : MonoBehaviour
 {
     /// <summary>
@@ -31,11 +30,6 @@ public class Jyx2Player : MonoBehaviour
     /// 交互的视野角度
     /// </summary>
     const float PLAYER_INTERACTIVE_ANGLE = 120f;
-
-    private bool _isControlEnable = true;
-    public PlayerLocomotionController locomotionController => _locomotionController;
-    [SerializeField]
-    private PlayerLocomotionController _locomotionController;
 
     public static Jyx2Player GetPlayer()
     {
@@ -57,15 +51,24 @@ public class Jyx2Player : MonoBehaviour
         c.enabled = true;
     }
 
-    public HybridAnimancerComponent m_Animancer;
     public Animator m_Animator;
 
-    
     public bool IsOnBoat;
 
     NavMeshAgent _navMeshAgent;
+    Jyx2_PlayerAutoWalk _autoWalker;
+    Jyx2_PlayerMovement m_PlayerMovement;
     Jyx2Boat _boat;
 
+    private float m_InteractDelayTime;
+
+    private bool m_IsInTimeline = false;
+
+    public bool IsInTimeline
+    {
+        get => m_IsInTimeline;
+        set => m_IsInTimeline = value;
+    }
 
     GameEventManager evtManager
     {
@@ -99,7 +102,7 @@ public class Jyx2Player : MonoBehaviour
     public bool GetOutBoat()
     {
         NavMeshHit myNavHit;
-        if (NavMesh.SamplePosition(transform.position, out myNavHit, 3.5f, GetNormalNavAreaMask()))
+        if (NavMesh.SamplePosition(transform.position, out myNavHit, 2.5f, GetNormalNavAreaMask()))
         {
             //比水平面还低
             if (myNavHit.position.y < 5f)
@@ -126,13 +129,23 @@ public class Jyx2Player : MonoBehaviour
         }
     }
 
+    public void GetInSecret()
+    {
+        _navMeshAgent.areaMask = GetSecretNavAreaMask();
+    }
+
+    public void GetOutSecret()
+    {
+        _navMeshAgent.areaMask = GetNormalNavAreaMask();
+    }
+
     /// <summary>
     /// 获取水路行走mask
     /// </summary>
     /// <returns></returns>
     int GetWaterNavAreaMask()
     {
-        return (0 << 0) + (0 << 1) + (1 << 2) + (1 << 3);
+        return (0 << 0) + (0 << 1) + (1 << 2) + (1 << 3) + (0 << 4);
     }
 
     /// <summary>
@@ -141,18 +154,25 @@ public class Jyx2Player : MonoBehaviour
     /// <returns></returns>
     int GetNormalNavAreaMask()
     {
-        return (1 << 0) + (0 << 1) + (1 << 2) + (0 << 3);
+        return (1 << 0) + (0 << 1) + (1 << 2) + (0 << 3) + (0 << 4);
     }
 
+    // 获取隐秘区域行走mask
+    int GetSecretNavAreaMask()
+    {
+        return (1 << 0) + (0 << 1) + (1 << 2) + (0 << 3) + (1 << 4);
+    }
 
     public void Init()
     {
+        m_PlayerMovement = GetComponent<Jyx2_PlayerMovement>();
         _navMeshAgent = GetComponent<NavMeshAgent>();
         _boat = FindObjectOfType<Jyx2Boat>();
+        _autoWalker = GetComponent<Jyx2_PlayerAutoWalk>();
         _gameEventLayerMask = LayerMask.GetMask("GameEvent");
-        
-        _locomotionController.Init(_navMeshAgent);
+        m_InteractDelayTime = Time.time + 0.1f;
     }
+
 
     void Start()
     {
@@ -165,20 +185,19 @@ public class Jyx2Player : MonoBehaviour
         }
     }
 
-    public void SetPlayerControlEnable(bool isEnable)
-    {
-        _isControlEnable = isEnable;
-    }
-
     public bool CanControlPlayer
     {
         get
         {
-            if (!_isControlEnable)
+            if (!Jyx2_Input.IsPlayerContext)
+                return false;
+            if (m_IsInTimeline)
+                return false;
+            if (_autoWalker.IsAutoWalking)
                 return false;
             if (Jyx2_UIManager.Instance.IsUIOpen(nameof(GameOver)))
                 return false;
-            if (StoryEngine.Instance != null && StoryEngine.Instance.BlockPlayerControl)
+            if (StoryEngine.BlockPlayerControl)
                 return false;
             if (LevelMaster.Instance != null && LevelMaster.Instance.IsFadingScene)
                 return false;
@@ -198,8 +217,14 @@ public class Jyx2Player : MonoBehaviour
 
         if (!CanControlPlayer)
             return;
-        //BigMapIdleJudge();
-        
+		
+	    //尝试解决战斗场景中出现交互按钮导致游戏卡死的问题
+        if (LevelMaster.IsInBattle)
+	        return;
+
+        //延迟下交互触发 不然加载后的第一帧 交互和对话会同时触发
+        if (m_InteractDelayTime >= Time.time)
+            return;
         //判断交互范围
         Debug.DrawRay(transform.position, transform.forward, Color.yellow);
 
@@ -219,56 +244,6 @@ public class Jyx2Player : MonoBehaviour
         }
     }
 
-
-    private float _bigmapIdleTimeCount = 0;
-    private const float BIG_MAP_IDLE_TIME = 5f;
-    private bool _playingbigMapIdle = false;
-
-    
-    private HybridAnimancerComponent GetPlayerAnimancer()
-    {
-        return m_Animancer;
-    }
-    
-    //在大地图上判断是否需要展示待机动作
-    void BigMapIdleJudge()
-    {
-        if(_boat == null) return; //暂实现：判断是否是大地图，有船才是大地图
-
-        var animator = m_Animator;
-        
-        if (_playingbigMapIdle)
-        {
-            //判断是否有移动速度，有的话立刻打断目前IDLE动作
-            if (animator!=null && animator.GetFloat("speed") > 0)
-            {
-                var animancer = GetPlayerAnimancer();
-                animancer.Stop();
-                animancer.PlayController();
-                _playingbigMapIdle = false;
-            }
-            return;
-        }
-
-        //一旦开始移动，则重新计时
-        if (animator!=null && animator.GetFloat("speed") > 0)
-        {
-            _bigmapIdleTimeCount = 0;
-            return;
-        }
-        
-        _bigmapIdleTimeCount += Time.deltaTime;
-        if (_bigmapIdleTimeCount > BIG_MAP_IDLE_TIME)
-        {
-            //展示IDLE动作
-            _bigmapIdleTimeCount = 0;
-            var animancer = GetPlayerAnimancer();
-            var clip = Jyx2.Middleware.Tools.GetRandomElement(GlobalAssetConfig.Instance.bigMapIdleClips);
-            animancer.Play(clip, 0.25f);
-            _playingbigMapIdle = true;
-        }
-    }
-    
     #region 事件交互
     
     private Collider[] targets = new Collider[10];
@@ -378,6 +353,7 @@ public class Jyx2Player : MonoBehaviour
         WorldMapSaveData worldData = runtime.WorldData;
         worldData.WorldPosition = this.transform.position;
         worldData.WorldRotation = this.transform.rotation;
+        worldData.areaMask = _navMeshAgent.areaMask;
         if (_boat == null) return;
         worldData.BoatWorldPos = _boat.transform.position;
         worldData.BoatRotate = _boat.transform.rotation; 
@@ -389,6 +365,7 @@ public class Jyx2Player : MonoBehaviour
         var runtime = GameRuntimeData.Instance;
         if (runtime.WorldData == null) return;
         
+        _navMeshAgent.areaMask = runtime.WorldData.areaMask;
         PlayerSpawnAt(runtime.WorldData.WorldPosition, runtime.WorldData.WorldRotation);
 
         LoadBoat();
@@ -419,7 +396,12 @@ public class Jyx2Player : MonoBehaviour
         _navMeshAgent.enabled = false;
         Debug.Log("load pos = " + spawnPos);
         transform.position = spawnPos;
-		transform.rotation = ori;
+        transform.rotation = ori;
         _navMeshAgent.enabled = true;
+    }
+
+    public void StopPlayerMovement()
+    {
+        m_PlayerMovement?.StopMovement();
     }
 }

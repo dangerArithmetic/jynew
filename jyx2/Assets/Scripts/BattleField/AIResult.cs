@@ -11,7 +11,6 @@
 using ProtoBuf;
 using System.Xml.Serialization;
 using Jyx2.Middleware;
-using Jyx2Configs;
 
 namespace Jyx2
 {
@@ -54,10 +53,45 @@ namespace Jyx2
 
         //使用的道具
         [XmlAttribute]
-        public Jyx2ConfigItem Item;
+        public LItemConfig Item;
         #endregion
 
-
+        //用来比较两个结果并显示Debug信息
+        public bool Equals(AIResult other)
+        {
+            /*if (MoveX != other.MoveX || MoveY != other.MoveY)
+            {
+                UnityEngine.Debug.LogError($"move diff {MoveX},{MoveY} - {other.MoveX},{other.MoveY}");
+                return false;
+            }
+            */
+            if (skillCastPK != other.skillCastPK)
+            {
+                UnityEngine.Debug.LogError($"skill diff {skillCastPK} ~ {other.skillCastPK}");
+                var itemid = -1;
+                var otherid = -2;
+                if (Item != null)
+                {
+                    itemid = Item.Id;
+                }
+                if (other.Item != null)
+                {
+                    otherid = other.Item.Id;
+                }
+                if (itemid != otherid)
+                {
+                    UnityEngine.Debug.LogError($"item diff {itemid} ~ {otherid}");
+                }
+                return false;
+            }
+            if (AttackX != other.AttackX || AttackY != other.AttackY)
+            {
+                UnityEngine.Debug.Log($"attack diff {AttackX},{AttackY} ~ {other.AttackX},{other.AttackY}");
+                return false;
+            }
+            UnityEngine.Debug.Log($"equal:{skillCastPK}");
+            return true;
+        }
     }
 
     public class SkillCastResult

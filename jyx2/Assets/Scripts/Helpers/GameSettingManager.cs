@@ -56,6 +56,9 @@ public static class GameSettingManager
 
 	private static bool _hasInitialized = false;
 
+	public static event Action<Jyx2_GameDifficulty> OnDifficultyChange;
+    
+
 	public static void Init()
 	{
 		if (_hasInitialized) return;
@@ -319,15 +322,9 @@ public static class GameSettingManager
 
 	#region Volume
 
-	private static float GetVolume()
+	public static float GetVolume()
 	{
-		float result = 1;
-		var key = GameConst.PLAYER_PREF_VOLUME;
-		if (Jyx2_PlayerPrefs.HasKey(key))
-		{
-			result = Jyx2_PlayerPrefs.GetFloat(key);
-		}
-
+		float result = Jyx2_PlayerPrefs.GetFloat(GameConst.PLAYER_PREF_VOLUME, 0.65f);
 		return result;
 	}
 
@@ -355,15 +352,19 @@ public static class GameSettingManager
 #endif
 	}
 
-	#endregion
+    #endregion
 
-	#region Difficulty
+    #region Difficulty
 
-	private static int GetDifficulty()
+    public static void SetGameDifficulty(int difficulty)
+    {
+        UpdateSetting(Catalog.Difficulty, difficulty);
+		OnDifficultyChange?.Invoke((Jyx2_GameDifficulty)difficulty);
+    }
+
+    public static int GetDifficulty()
 	{
-		return Jyx2_PlayerPrefs.HasKey(GameConst.PLAYER_PREF_Difficulty)
-			? Jyx2_PlayerPrefs.GetInt(GameConst.PLAYER_PREF_Difficulty)
-			: 0;
+		return Jyx2_PlayerPrefs.GetInt(GameConst.PLAYER_PREF_Difficulty, (int)Jyx2_GameDifficulty.Simple);
 	}
 
 	#endregion
@@ -448,7 +449,11 @@ public static class GameSettingManager
 	{
 		if (!GlobalAssetConfig.Instance) return;
 		int debugMode = (int) mode;
+#if DEVELOPMENT_BUILD
+		ScreenLogger.Instance.ShowLog = true;
+#else
 		ScreenLogger.Instance.ShowLog = (debugMode == 1);
+#endif
 	}
 	
 	#endregion

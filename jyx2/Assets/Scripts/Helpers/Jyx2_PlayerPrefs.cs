@@ -1,5 +1,4 @@
-﻿
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using UnityEngine;
@@ -55,8 +54,12 @@ namespace Jyx2
 
     public static class Jyx2_PlayerPrefs
     {
-        private static readonly string SavePath = Path.Combine(Application.persistentDataPath, "PlayerPrefs/Jyx2_PlayerPrefs.json");
-
+        private static readonly string SavePath = Path.Combine(Application.persistentDataPath,
+#if UNITY_EDITOR
+            "PlayerPrefs/Jyx2_PlayerPrefs_Editor.json");
+#else
+            "PlayerPrefs/Jyx2_PlayerPrefs.json");
+#endif
         private static Jyx2_PlayerPrefsData m_PrefsData = new Jyx2_PlayerPrefsData();
 
         private static bool m_Init = false;
@@ -97,7 +100,16 @@ namespace Jyx2
             m_PrefsData.Clear();
             try
             {
-                var jsonText = File.ReadAllText(SavePath);
+                string jsonText;
+                if (Application.isMobilePlatform)
+                {
+                    jsonText = PlayerPrefs.GetString(SavePath);    
+                }
+                else
+                {
+                    jsonText = File.ReadAllText(SavePath);    
+                }
+
                 var newPrefs = JsonConvert.DeserializeObject<Jyx2_PlayerPrefsData>(jsonText);
                 if(newPrefs != null)
                 {
@@ -141,7 +153,15 @@ namespace Jyx2
             try
             {
                 var jsonText = JsonConvert.SerializeObject(m_PrefsData, Formatting.Indented);
-                File.WriteAllText(SavePath, jsonText);
+                if (Application.isMobilePlatform)
+                {
+                    PlayerPrefs.SetString(SavePath, jsonText);
+                    PlayerPrefs.Save();    
+                }
+                else
+                {
+                    File.WriteAllText(SavePath, jsonText);    
+                }
             }
             catch (Exception ex)
             {
@@ -150,49 +170,56 @@ namespace Jyx2
             }
         }
 
-        #region Get & Set API
+#region Get & Set API
         public static float GetFloat(string key, float defaultValue = 0)
         {
+            CheckInit();
             return GetValue(m_PrefsData.m_FloatDic, key, defaultValue);
         }
 
         public static int GetInt(string key, int defaultValue = 0)
         {
+            CheckInit();
             return GetValue(m_PrefsData.m_IntDic, key, defaultValue);
         }
 
 
         public static string GetString(string key, string defaultValue = "")
         {
+            CheckInit();
             return GetValue(m_PrefsData.m_StringDic, key, defaultValue);
         }
 
         public static bool GetBool(string key, bool defaultValue = false)
         {
+            CheckInit();
             return GetValue(m_PrefsData.m_BoolDic, key, defaultValue);
         }
 
         public static void SetFloat(string key, float value)
         {
+            CheckInit();
             SetValue(m_PrefsData.m_FloatDic, key, value);
         }
         public static void SetInt(string key, int value)
         {
+            CheckInit();
             SetValue(m_PrefsData.m_IntDic, key, value);
         }
         public static void SetString(string key, string value)
         {
+            CheckInit();
             SetValue(m_PrefsData.m_StringDic, key, value);
         }
 
         public static void SetBool(string key, bool value)
         {
+            CheckInit();
             SetValue(m_PrefsData.m_BoolDic, key, value);
         }
 
         private static void SetValue<T>(Dictionary<string, T> dic, string key, T val)
         {
-            CheckInit();
             if (dic.ContainsKey(key))
             {
                 dic[key] = val;
@@ -201,20 +228,18 @@ namespace Jyx2
             {
                 dic.Add(key, val);
             }
-#if UNITY_EDITOR
+
             Save();
-#endif
         }
 
         private static T GetValue<T>(Dictionary<string, T> dic, string key, T defaultValue)
         {
-            CheckInit();
             if (dic.ContainsKey(key))
                 return dic[key];
             return defaultValue;
         }
 
-        #endregion
+#endregion
     }
 
 }

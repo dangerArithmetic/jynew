@@ -20,7 +20,6 @@ using Jyx2;
 
 using Jyx2.Battle;
 using Jyx2.Middleware;
-using Jyx2Configs;
 using UnityEngine;
 using Random = UnityEngine.Random;
 
@@ -30,7 +29,7 @@ namespace Jyx2
     {
         public Action<BattleResult> callback; //战斗结果
         public List<RoleInstance> roles; //参与战斗的角色
-        public Jyx2ConfigBattle battleData; //战斗地图数据
+        public LBattleConfig battleData; //战斗地图数据
         public bool backToBigMap = true;
         public bool playerJoin = true;
     }
@@ -91,6 +90,7 @@ namespace Jyx2
         {
             Debug.Log("StartBattle called");
             if (IsInBattle) return;
+            
             var tempView = _player.View;
             if (tempView == null)
             {
@@ -118,6 +118,8 @@ namespace Jyx2
                 }
             }
 
+            //初始化Lua侧战斗模块
+            LuaExecutor.CallLua("Jyx2.Battle.Manager.OnBattleStart");
             //await UniTask.Delay(TimeSpan.FromSeconds(0.5f));
             await UniTask.WaitForEndOfFrame();
 
@@ -141,13 +143,22 @@ namespace Jyx2
             //---------------------------------------------------------------------------
 
             await Jyx2_UIManager.Instance.ShowUIAsync(nameof(BattleMainUIPanel), BattleMainUIState.ShowHUD); //展示角色血条
+
+            if (RuntimeEnvSetup.CurrentModConfig.BattleTimeScale > 1)
+            {
+                _prevTimeScle = Time.timeScale;
+                Time.timeScale = RuntimeEnvSetup.CurrentModConfig.BattleTimeScale;    
+            }
             
             await new BattleLoop(this).StartLoop();
         }
+
+        private float _prevTimeScle = 1f;
         
 
         public void OnBattleEnd(BattleResult result)
         {
+            Time.timeScale = _prevTimeScle;
             switch (result)
             {
                 case BattleResult.Win:
@@ -215,6 +226,8 @@ namespace Jyx2
         public void EndBattle()
         {
             IsInBattle = false;
+            //Lua侧清理
+            LuaExecutor.CallLua("Jyx2.Battle.Manager.OnBattleEnd");
             Jyx2_UIManager.Instance.HideUI(nameof(BattleMainUIPanel));
 
             //临时，需要调整
@@ -256,7 +269,7 @@ namespace Jyx2
             role.PreviousRoundHp = role.Hp;
             //待命
             role.View.Idle();
-            var enemy = AIManager.Instance.GetNearestEnemy(role);
+            var enemy = LuaExecutor.CallLua<RoleInstance,RoleInstance>("Jyx2.Battle.AIManager.GetNearestEnemy", role);
             if (enemy != null)
             {
                 //面向最近的敌人
@@ -270,7 +283,7 @@ namespace Jyx2
             }
         }
 
-        string CalExpGot(Jyx2ConfigBattle battleData)
+        string CalExpGot(LBattleConfig battleData)
         {
             List<RoleInstance> alive_teammate = m_BattleModel.Teammates;
             var dead_teammates = m_BattleModel.Dead.Where(r => r.team == 0);
@@ -353,7 +366,7 @@ namespace Jyx2
                             //---------------------------------------------------------------------------
                             //特定位置的翻译【战斗胜利角色修炼武功升级提示】
                             //---------------------------------------------------------------------------
-                            bonusTextBuilder.AppendFormat("{0} 升为 {1}级\n".GetContent(nameof(BattleManager)), GameConfigDatabase.Instance.Get<Jyx2ConfigSkill>(practiseItem.Skill).Name, level);
+                            bonusTextBuilder.AppendFormat("{0} 升为 {1}级\n".GetContent(nameof(BattleManager)), LuaToCsBridge.SkillTable[practiseItem.Skill].Name, level);
                             //---------------------------------------------------------------------------
                             //---------------------------------------------------------------------------
                         }
@@ -376,6 +389,10 @@ namespace Jyx2
         BattleBlockData FindNearestBattleBlock(Vector3 pos, bool ignoreRole = false)
         {
             BattleBlockData rst = null;
+            //先检查脚下的格子是否能用，如果能用就不再遍历查找最近格子
+            var locBlock = BattleboxHelper.Instance.GetLocationBattleBlock(pos);
+            if (locBlock != null && !m_BattleModel.BlockHasRole(locBlock.BattlePos.X, locBlock.BattlePos.Y)) return locBlock;
+
             var list = BattleboxHelper.Instance.GetBattleBlocks();
             var minDist = float.MaxValue;
             foreach (var data in list)
@@ -442,7 +459,7 @@ namespace Jyx2
             //获得角色移动能力
             int moveAbility = role.GetMoveAbility();
             //绘制周围的移动格子
-            var blockList = rangeLogic.GetMoveRange(role.Pos.X, role.Pos.Y, moveAbility - movedStep, false, true);
+            var blockList = rangeLogic.GetMoveRange(role.Pos.X, role.Pos.Y, moveAbility - movedStep, false);
             return blockList;
         }
 

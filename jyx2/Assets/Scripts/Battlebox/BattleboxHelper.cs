@@ -8,19 +8,21 @@
  * 金庸老先生千古！
  */
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
 using ch.sycoforge.Decal;
 using Jyx2;
+using Jyx2.InputCore;
 using UnityEngine;
-using UnityEngine.AI;
-using UnityEngine.SceneManagement;
+using UnityEngine.EventSystems;
 
-public class BattleboxHelper : MonoBehaviour
+public class BattleboxHelper : MonoBehaviour,IJyx2_InputContext
 {
+	void OnDestroy()
+	{
+		InputContextManager.Instance.RemoveInputContext(this);
+	}
+
 	public static BattleboxHelper Instance
 	{
 		get
@@ -32,7 +34,7 @@ public class BattleboxHelper : MonoBehaviour
 	private static BattleboxHelper _instance;
 
 	//绘制区域（主角身边的范围）
-	public int m_MoveZoneDrawRange = 16;
+	public int m_MoveZoneDrawRange = 20;
 
 	private BattleboxManager _currentBattlebox;
 
@@ -40,14 +42,29 @@ public class BattleboxHelper : MonoBehaviour
 	private bool _isInit = false;
 	private BattleboxManager[] _boxList;
 	private GameObject _boxRoot;
-	private bool downDpadPressed;
-	private bool currentlyReleased = true;
-	private bool upDpadPressed;
+	private BattleBlockType m_CurrentType;
 
 	void Start()
 	{
 		Init();
 	}
+
+    void RegisterInput()
+	{
+		//不能选中UI，不然按A键就触发按钮回调了
+		EventSystem.current?.SetSelectedGameObject(null);
+		EventSystem.current.sendNavigationEvents = false;
+        
+        InputContextManager.Instance.AddInputContext(this);
+		//这一帧UI的A键确认了，等下一帧在响应
+		m_InputEnableFrame = Time.frameCount + 1;
+    }
+
+    void UnRegisterInput()
+	{
+        InputContextManager.Instance.RemoveInputContext(this);
+		EventSystem.current.sendNavigationEvents = true;
+    }
 
 	//某位置是否能触发战斗
 	public bool CanEnterBattle(Vector3 pos)
@@ -80,14 +97,13 @@ public class BattleboxHelper : MonoBehaviour
 		ClearAllBlocks();
 		foreach (var box in _boxList)
 		{
-			if (box.ColliderContain(pos))
-			{
-				Debug.Log($"找到了战斗盒子，玩家坐标：{pos.x}：{pos.y}：{pos.z}");
-				_currentBattlebox = box;
-				_currentBattlebox.Init();
-				_currentBattlebox.DrawAreaBlocks(pos, m_MoveZoneDrawRange);
-				return true;
-			}
+			if (!box.ColliderContain(pos)) continue;
+			Debug.Log($"找到了战斗盒子，玩家坐标：{pos.x}：{pos.y}：{pos.z}");
+			_currentBattlebox = box;
+			_currentBattlebox.Init();
+			_currentBattlebox.DrawAreaBlocks(pos, m_MoveZoneDrawRange);
+
+			return true;
 		}
 		return false;
 	}
@@ -115,7 +131,7 @@ public class BattleboxHelper : MonoBehaviour
 
 	//清除当前
 	//脱离战斗的时候必须调用
-	public void ClearAllBlocks()
+	private void ClearAllBlocks()
 	{
 		if (_isInit && _currentBattlebox != null)
 			_currentBattlebox.ClearAllBlocks();
@@ -155,96 +171,106 @@ public class BattleboxHelper : MonoBehaviour
 	private int xMiddlePos = -1;
 	private int[] yPositions = new int[0];
 	private int yMiddlePos;
-	private int xCurPos;
-	private int yCurPos;
-
+	private int CurPosX;
+	private int CurPosY;
+    
 	public bool AnalogMoved = false;
 
-	private void Update()
+	private int m_InputEnableFrame = int.MaxValue;
+	public bool CanUpdate => m_InputEnableFrame <= Time.frameCount;
+    
+
+	public void OnUpdate()
 	{
 		if (xPositions.Length == 0 || yPositions.Length == 0)
 			return;
-
-		var move = GamepadHelper.GetLeftAnalogMove();
-		var leftStickX = move.X;
-		var leftStickY = move.Y;
-
-		if (Math.Abs(leftStickX) > 0 || Math.Abs(leftStickY)> 0)
+        if(Jyx2_Input.GetNegativeButtonDown(Jyx2ActionConst.MoveHorizontal))
 		{
-			if (leftStickY < 0)
-			{
-				if (currentlyReleased)
-				{
-					if (yCurPos < yPositions.Last())
-					{
-						yCurPos++;
-
-						if (!setSelectedBlock())
-							yCurPos--;
-					}
-				}
-			}
-			else if (leftStickY > 0)
-			{
-				if (currentlyReleased)
-				{
-					if (yCurPos > yPositions.First())
-					{
-						yCurPos--;
-
-						if (!setSelectedBlock())
-							yCurPos++;
-					}
-				}
-			}
-
-			if (leftStickX < 0)
-			{
-				if (currentlyReleased)
-				{
-					if (xCurPos < xPositions.Last())
-					{
-						xCurPos++;
-
-						if (!setSelectedBlock())
-							xCurPos--;
-					}
-				}
-			}
-			else if (leftStickX > 0)
-			{
-				if (currentlyReleased)
-				{
-					if (xCurPos > xPositions.First())
-					{
-						xCurPos--;
-
-						if (!setSelectedBlock())
-							xCurPos++;
-					}
-				}
-			}
-
-			currentlyReleased = false;
-			delayedAxisRelease();
+			TryMoveHorizontal(CurPosX + 1);
 		}
-
-		if (GamepadHelper.IsConfirm())
+        else if(Jyx2_Input.GetButtonDown(Jyx2ActionConst.MoveHorizontal))
 		{
-			if (AnalogMoved && blockConfirmed != null)
+            TryMoveHorizontal(CurPosX - 1);
+        }
+
+        if (Jyx2_Input.GetNegativeButtonDown(Jyx2ActionConst.MoveVertical))
+        {
+            TryMoveVertical(CurPosY + 1);
+        }
+        else if (Jyx2_Input.GetButtonDown(Jyx2ActionConst.MoveVertical))
+        {
+            TryMoveVertical(CurPosY - 1);
+        }
+
+
+        if (Jyx2_Input.GetButtonDown(Jyx2ActionConst.UIConfirm))
+		{
+			if (AnalogMoved && !IsMoveSelectAndBlocked(CurPosX, CurPosY))
 			{
-				var selectedBlock =  _currentBattlebox.GetBlockData(xCurPos, yCurPos);
+				var selectedBlock =  _currentBattlebox.GetBlockData(CurPosX, CurPosY);
 				if (selectedBlock != null && !selectedBlock.Inaccessible)
 				{
-					blockConfirmed(selectedBlock);
+					OnBlockConfirmed?.Invoke(selectedBlock);
 				}
 			}
 		}
+
+        if (IsCancelBoxSelection())
+        {
+			TryCancelBoxSelection();
+        }
+
+    }
+    
+    private void TryMoveHorizontal(int newPosX)
+	{
+        if (newPosX < xPositions.First() || newPosX > xPositions.Last())
+            return;
+        if (TrySelectNewBlock(newPosX, CurPosY))
+            CurPosX = newPosX;
+    }
+
+    private void TryMoveVertical(int newPosY)
+	{
+        if (newPosY < yPositions.First() || newPosY > yPositions.Last())
+            return;
+		if (TrySelectNewBlock(CurPosX, newPosY))
+			CurPosY = newPosY;
+    }
+
+	public bool IsMoveSelectAndBlocked(int x, int y)
+	{
+		return m_CurrentType == BattleBlockType.MoveZone && IsRoleStandingInBlock(x, y);
 	}
 
-	private bool setSelectedBlock()
+	public bool IsRoleStandingInBlock(int x, int y)
+    {
+		var battleModel = BattleManager.Instance.GetModel();
+		if (battleModel == null)
+			return false;
+		return battleModel.BlockHasRole(x, y);
+	}
+
+    private bool IsCancelBoxSelection()
+    {
+        if (Jyx2_Input.GetButtonDown(Jyx2ActionConst.UIClose))
+            return true;
+        if (Input.GetMouseButtonDown(1) && !Application.isMobilePlatform)
+            return true;
+        return false;
+    }
+
+    public void TryCancelBoxSelection()
 	{
-		var newSelectedBlock =  _currentBattlebox.GetBlockData(xCurPos, yCurPos);
+        var ui = Jyx2_UIManager.Instance.GetUI<BattleActionUIPanel>();
+        if (ui != null)
+            ui.OnCancelBoxSelection();
+    }
+
+
+	private bool TrySelectNewBlock(int newX, int newY)
+	{
+		var newSelectedBlock =  _currentBattlebox.GetBlockData(newX, newY);
 		if (newSelectedBlock != null && newSelectedBlock.IsActive)
 		{
 			if (_selectedBlock != null)
@@ -261,8 +287,8 @@ public class BattleboxHelper : MonoBehaviour
 
 			AnalogMoved = true;
 
-			if (analogLeftMovedToBlock != null)
-				analogLeftMovedToBlock(newSelectedBlock);
+			if (OnBlockSelectMoved != null)
+				OnBlockSelectMoved(newSelectedBlock);
 
 			return true;
 		}
@@ -270,8 +296,8 @@ public class BattleboxHelper : MonoBehaviour
 		return false;
 	}
 
-	public event Action<BattleBlockData> analogLeftMovedToBlock;
-	public event Action<BattleBlockData> blockConfirmed;
+	public event Action<BattleBlockData> OnBlockSelectMoved;
+	public event Action<BattleBlockData> OnBlockConfirmed;
 
 	private void initXPos()
 	{
@@ -295,15 +321,6 @@ public class BattleboxHelper : MonoBehaviour
 		.ToArray();
 	}
 
-	protected void delayedAxisRelease()
-	{
-		Task.Run(() =>
-		{
-			Thread.Sleep(200);
-			currentlyReleased = true;
-		});
-	}
-
 	bool rangeMode = false;
 	private BattleBlockData _selectedBlock;
 	private Color _oldColor;
@@ -313,8 +330,8 @@ public class BattleboxHelper : MonoBehaviour
 	{
 		if (!GeneralPreJudge()) return;
 		HideAllBlocks();
-
-		if (type == BattleBlockType.MoveZone)
+		m_CurrentType = type;
+        if (type == BattleBlockType.MoveZone)
 		{
 			_currentBattlebox.SetAllBlockColor(new Color(1, 1, 1, BattleboxManager.BATTLEBLOCK_DECAL_ALPHA));
 			_selectedBlock = null;
@@ -346,19 +363,19 @@ public class BattleboxHelper : MonoBehaviour
 
 		if (selectMiddlePos)
 		{
-			setSelectedBlock();
+			TrySelectNewBlock(CurPosX, CurPosY);
 		}
-
+		RegisterInput();
 		rangeMode = false;
 	}
 
 	private void initShownPositions()
 	{
 		initXPos();
-		xCurPos = xMiddlePos;
+		CurPosX = xMiddlePos;
 
 		initYPos();
-		yCurPos = yMiddlePos;
+		CurPosY = yMiddlePos;
 	}
 
 	public void ShowRangeBlocks(IEnumerable<BattleBlockVector> list)
@@ -387,8 +404,8 @@ public class BattleboxHelper : MonoBehaviour
 		{
 			_currentBattlebox.HideAllRangeBlocks();
 		}
-
 		_selectedBlock = null;
+		UnRegisterInput();
 	}
 
 
@@ -400,7 +417,7 @@ public class BattleboxHelper : MonoBehaviour
 		_currentBattlebox.ShowAllValidBlocks();
 	}
 
-	public void ShowMoveZone(Vector3 center, int range = -1)
+	void ShowMoveZone(Vector3 center, int range = -1)
 	{
 		if (!GeneralPreJudge()) return;
 		_currentBattlebox.HideAllBlocks();

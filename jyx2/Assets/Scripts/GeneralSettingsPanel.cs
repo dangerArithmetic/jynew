@@ -16,8 +16,11 @@ using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.Audio;
 using UnityEngine.Events;
+using Jyx2;
+using Rewired;
+using System.Text;
 
-public class GeneralSettingsPanel : Jyx2_UIBase
+public class GeneralSettingsPanel : Jyx2_UIBase,ISettingChildPanel
 {
     public Dropdown resolutionDropdown;
     public Dropdown windowDropdown;
@@ -30,7 +33,8 @@ public class GeneralSettingsPanel : Jyx2_UIBase
     public Slider volumeSlider;
     public Slider soundEffectSlider;
 
-    public Button m_CloseButton;
+    public Button JoyStickTestButton;
+
 
     private GraphicSetting _graphicSetting;
     Resolution[] resolutions;
@@ -72,7 +76,6 @@ public class GeneralSettingsPanel : Jyx2_UIBase
     void Start()
     {
         Debug.Log("GeneralSettingsPanel Start()");
-        _graphicSetting = GraphicSetting.GlobalSetting;
 
         InitWindowDropdown();
         InitResolutionDropdown();
@@ -97,17 +100,20 @@ public class GeneralSettingsPanel : Jyx2_UIBase
         debugModeDropdown.onValueChanged.AddListener(SetDebugMode);
         mobileMoveModeDropdown.onValueChanged.AddListener(SetMobileMoveMode);
         mobileMoveModeDropdown.gameObject.SetActive(Application.isMobilePlatform);
-        
-        m_CloseButton.onClick.AddListener(Close);
-        
+
+        JoyStickTestButton.onClick.AddListener(OnJoyStickTestBtnClick);
+        //JoyStickTestButton.gameObject.SetActive(!Application.isMobilePlatform);
         Debug.Log("GeneralSettingsPanel Start() END");
     }
 
-    public void Close()
+    public void ApplySetting()
     {
-        _graphicSetting.Save();
-        _graphicSetting.Execute();
-        Jyx2_UIManager.Instance.HideUI(nameof(GameSettingsPanel));
+        
+    }
+
+    public void SetVisibility(bool isVisible)
+    {
+        gameObject.SetActive(isVisible);
     }
 
     public void InitResolutionDropdown()
@@ -160,11 +166,7 @@ public class GeneralSettingsPanel : Jyx2_UIBase
 
     void InitVolumeSlider()
     {
-        var volume = gameSetting[GameSettingManager.Catalog.Volume];
-        if (volume is float value)
-        {
-            volumeSlider.value = value;
-        }
+        volumeSlider.value = GameSettingManager.GetVolume();
     }
 
     public void InitSoundEffectSlider()
@@ -241,7 +243,7 @@ public class GeneralSettingsPanel : Jyx2_UIBase
     
     private void SetDifficulty(int index)
     {
-        GameSettingManager.UpdateSetting(GameSettingManager.Catalog.Difficulty, index);
+        GameSettingManager.SetGameDifficulty(index);
     }
     
     private void SetLanguage(int index)
@@ -258,26 +260,33 @@ public class GeneralSettingsPanel : Jyx2_UIBase
     {
         GameSettingManager.UpdateSetting(GameSettingManager.Catalog.MobileMoveMode, index);
     }
-    
-    public void SetGameDifficulty(int index)
-    {
-        GameSettingManager.UpdateSetting(GameSettingManager.Catalog.Difficulty, index);
-    }
 
-    protected override void OnCreate()
+    private void OnJoyStickTestBtnClick()
     {
-
-    }
-
-    public override void Update()
-    {
-        //only allow close setting for now, so at least this UI can be closed via gamepad
-        if (gameObject.activeSelf)
+        Action onCopy = () =>
         {
-            if (GamepadHelper.IsConfirm() || GamepadHelper.IsCancel())
-            {
-                Close();
-            }
+            var ui = Jyx2_UIManager.Instance.GetUI<CommonNoticePanel>();
+            if (ui == null)
+                return;
+            GUIUtility.systemCopyBuffer = ui.Content;
+            CommonTipsUIPanel.ShowPopInfo("调试信息已复制到剪贴版");
+        };
+
+        var sb = new StringBuilder(); 
+        var allJoySticks = ReInput.controllers.Joysticks;
+        
+        sb.AppendLine("<color=red>以下为手柄测试输出日志, 如有问题请点击复制后发送给开发者</color>");
+        sb.AppendLine();
+        foreach (var joyStick in allJoySticks)
+        {
+            sb.AppendFormat("<color=yellow>[设备名:{0}]</color>  <color=green>识别码:{1}</color>\n", joyStick.hardwareName, joyStick.hardwareTypeGuid);
         }
+        
+        sb.AppendLine("=======按键列表======");
+        var json = Jyx2.InputCore.Jyx2_Input.GetAllJoyStickJsonData();
+        sb.Append(json);
+        
+        
+        CommonNoticePanel.ShowNotice("手柄信息", sb.ToString(), onCopy, null, "复制");
     }
 }
